@@ -1,0 +1,72 @@
+.avatar-cropper-card {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+  background: #fff;
+}
+
+.avatar-cropper-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.avatar-cropper {
+  position: relative;
+  width: 320px;
+  height: 320px;
+  border-radius: 16px;
+  background: #111;
+  overflow: hidden;
+  touch-action: none;
+  margin-bottom: 12px;
+}
+
+.avatar-cropper img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) translate(var(--tx), var(--ty))
+    scale(var(--scale));
+  transform-origin: center;
+  user-select: none;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.avatar-cropper-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle 120px at center,
+    rgba(0, 0, 0, 0) 0 120px,
+    rgba(0, 0, 0, 0.55) 121px 100%
+  );
+  pointer-events: none;
+}
+
+.avatar-cropper-ring {
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+  pointer-events: none;
+}
+
+.avatar-cropper-controls {
+  max-width: 320px;
+}
+
+.avatar-cropper-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}

@@ -1,0 +1,75 @@
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  background: #f8f9fa;
+}
+
+.app-sidebar {
+  width: 240px;
+  background: #ffffff;
+  border-right: 1px solid #e6e8ef;
+}
+
+.app-logo {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.app-nav-link {
+  border-radius: 10px;
+  color: #1f2937;
+  font-weight: 500;
+  padding: 0.6rem 0.9rem;
+}
+
+.app-nav-link.active {
+  background: #eef2ff;
+  color: #1f2937;
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-content {
+  flex: 1;
+}
+
+.app-header .avatar-pill {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #0d6efd;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+@media (max-width: 991px) {
+  .app-shell {
+    flex-direction: column;
+  }
+
+  .app-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e6e8ef;
+  }
+
+  .app-sidebar .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .app-nav-link {
+    flex: 1 1 140px;
+    justify-content: center;
+  }
+}
