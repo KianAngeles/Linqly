@@ -9,7 +9,7 @@ export default function MapSearch({
   onSelectResult,
 }) {
   return (
-    <div className="map-search" ref={searchRef}>
+    <div className="map-search map-overlay" ref={searchRef}>
       <form onSubmit={onSubmitSearch} className="d-flex gap-2">
         <input
           className="form-control form-control-sm"

@@ -7,6 +7,7 @@ const Friendship = require("../models/Friendship");
 const { authRequired } = require("../middleware/authRequired");
 const { makePairKey } = require("../utils/pairKey");
 const ChatSetting = require("../models/ChatSetting");
+const ChatRead = require("../models/ChatRead");
 const Hangout = require("../models/Hangout");
 const User = require("../models/User");
 const { getIO } = require("../realtime");
@@ -44,6 +45,54 @@ function isAdminOrCreator(chat, userId) {
   if (!chat) return false;
   if (String(chat.creatorId) === String(userId)) return true;
   return (chat.admins || []).some((id) => String(id) === String(userId));
+}
+
+function emitJoinRequest(chatId, request) {
+  const io = getIO();
+  if (!io) return;
+  io.to(String(chatId)).emit("chat:join-request", { chatId, request });
+}
+
+function emitJoinRequestResolved(chatId, userId) {
+  const io = getIO();
+  if (!io) return;
+  io.to(String(chatId)).emit("chat:join-request:resolved", { chatId, userId });
+}
+
+async function emitSystemMessage(chatId, senderId, text) {
+  if (!text) return;
+  const msg = await Message.create({
+    chatId,
+    senderId,
+    type: "system",
+    text,
+    replyTo: null,
+    replyPreview: { text: "", senderUsername: "" },
+    reactions: [],
+  });
+
+  await Chat.updateOne(
+    { _id: chatId },
+    {
+      $set: {
+        lastMessageAt: msg.createdAt,
+        lastMessageText: text,
+        lastMessageId: msg._id,
+        lastMessageSenderId: msg.senderId,
+      },
+    }
+  );
+
+  const io = getIO();
+  if (io) {
+    io.to(String(chatId)).emit("message:new", {
+      id: msg._id,
+      chatId,
+      type: msg.type,
+      text: msg.text,
+      createdAt: msg.createdAt,
+    });
+  }
 }
 
 /**
@@ -135,6 +184,7 @@ router.post("/group", authRequired, async (req, res) => {
     admins: [me],
     avatarUrl: null,
     pendingJoinRequests: [],
+    requireAdminApproval: false,
     lastMessageAt: null,
     lastMessageText: "",
   });
@@ -211,7 +261,14 @@ router.post("/:chatId/leave", authRequired, async (req, res) => {
 
     await Chat.updateOne(
       { _id: chatId },
-      { $set: { lastMessageAt: msg.createdAt, lastMessageText: text } }
+      {
+        $set: {
+          lastMessageAt: msg.createdAt,
+          lastMessageText: text,
+          lastMessageId: msg._id,
+          lastMessageSenderId: msg.senderId,
+        },
+      }
     );
 
     const io = getIO();
@@ -243,7 +300,9 @@ router.post("/:chatId/members", authRequired, async (req, res) => {
     return res.status(400).json({ message: "Invalid userId" });
   }
 
-  const chat = await Chat.findById(chatId).select("members type");
+  const chat = await Chat.findById(chatId).select(
+    "members type creatorId admins requireAdminApproval pendingJoinRequests"
+  );
   if (!chat) return res.status(404).json({ message: "Chat not found" });
   if (chat.type !== "group") {
     return res.status(400).json({ message: "Only group chats can add members" });
@@ -262,6 +321,40 @@ router.post("/:chatId/members", authRequired, async (req, res) => {
     return res
       .status(403)
       .json({ message: "You can only add your friends" });
+  }
+
+  const isAdmin = isAdminOrCreator(chat, me);
+  const needsApproval = chat.requireAdminApproval === true;
+  if (needsApproval && !isAdmin) {
+    if (
+      (chat.pendingJoinRequests || []).some(
+        (r) => String(r.userId) === String(userId)
+      )
+    ) {
+      return res.status(409).json({ message: "Request already pending" });
+    }
+    const requestedAt = new Date();
+    await Chat.updateOne(
+      { _id: chatId },
+      {
+        $push: { pendingJoinRequests: { userId, requestedAt } },
+      }
+    );
+    const requester = await User.findById(me).select("username");
+    const requestedUser = await User.findById(userId).select("username avatarUrl");
+    emitJoinRequest(chatId, {
+      user: {
+        id: requestedUser?._id,
+        username: requestedUser?.username || "Someone",
+        avatarUrl: resolveAvatar(requestedUser),
+      },
+      requestedAt,
+    });
+    const text = `${requester?.username || "Someone"} requested to add ${
+      requestedUser?.username || "someone"
+    }`;
+    await emitSystemMessage(chatId, me, text);
+    return res.json({ ok: true, pending: true });
   }
 
   await Chat.updateOne(
@@ -287,7 +380,14 @@ router.post("/:chatId/members", authRequired, async (req, res) => {
 
   await Chat.updateOne(
     { _id: chatId },
-    { $set: { lastMessageAt: msg.createdAt, lastMessageText: text } }
+    {
+      $set: {
+        lastMessageAt: msg.createdAt,
+        lastMessageText: text,
+        lastMessageId: msg._id,
+        lastMessageSenderId: msg.senderId,
+      },
+    }
   );
 
   const io = getIO();
@@ -318,7 +418,9 @@ router.get("/:chatId", authRequired, async (req, res) => {
     .populate("admins", "username avatarUrl")
     .populate("creatorId", "username avatarUrl")
     .populate("pendingJoinRequests.userId", "username avatarUrl")
-    .select("type name avatarUrl creatorId admins members pendingJoinRequests");
+    .select(
+      "type name avatarUrl creatorId admins members pendingJoinRequests nicknames requireAdminApproval"
+    );
 
   if (!chat) return res.status(404).json({ message: "Chat not found" });
   if (!["group", "hangout"].includes(chat.type)) {
@@ -333,6 +435,10 @@ router.get("/:chatId", authRequired, async (req, res) => {
       id: chat._id,
       name: chat.name || "",
       avatarUrl: chat.avatarUrl || null,
+      nicknames:
+        chat.nicknames && typeof chat.nicknames.get === "function"
+          ? Object.fromEntries(chat.nicknames)
+          : chat.nicknames || {},
       creator: chat.creatorId
         ? {
             id: chat.creatorId._id,
@@ -360,7 +466,35 @@ router.get("/:chatId", authRequired, async (req, res) => {
           },
           requestedAt: r.requestedAt,
         })),
+      requireAdminApproval: chat.requireAdminApproval === true,
     },
+  });
+});
+
+// GET /chats/:chatId/reads
+router.get("/:chatId/reads", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { chatId } = req.params;
+
+  if (!mongoose.isValidObjectId(chatId)) {
+    return res.status(400).json({ message: "Invalid chatId" });
+  }
+
+  const chat = await Chat.findById(chatId).select("members");
+  if (!chat) return res.status(404).json({ message: "Chat not found" });
+
+  const isMember = chat.members.some((id) => String(id) === String(me));
+  if (!isMember) return res.status(403).json({ message: "Not a member" });
+
+  const reads = await ChatRead.find({ chatId })
+    .select("userId lastReadMessageId readAt");
+
+  res.json({
+    reads: reads.map((r) => ({
+      userId: String(r.userId),
+      lastReadMessageId: String(r.lastReadMessageId),
+      readAt: r.readAt,
+    })),
   });
 });
 
@@ -368,25 +502,38 @@ router.get("/:chatId", authRequired, async (req, res) => {
 router.patch("/:chatId/group", authRequired, async (req, res) => {
   const me = req.user.userId;
   const { chatId } = req.params;
-  const { name } = req.body || {};
+  const { name, nicknameUserId, nickname, requireAdminApproval } = req.body || {};
 
   if (!mongoose.isValidObjectId(chatId)) {
     return res.status(400).json({ message: "Invalid chatId" });
   }
 
-  const chat = await Chat.findById(chatId).select("type members creatorId admins hangoutId");
+  const chat = await Chat.findById(chatId).select(
+    "type members creatorId admins hangoutId name nicknames requireAdminApproval"
+  );
   if (!chat) return res.status(404).json({ message: "Chat not found" });
-  if (!["group", "hangout"].includes(chat.type)) {
+  if (!["group", "hangout", "direct"].includes(chat.type)) {
     return res.status(400).json({ message: "Not a group chat" });
   }
 
   const isMember = chat.members.some((id) => String(id) === String(me));
   if (!isMember) return res.status(403).json({ message: "Not a member" });
-  if (!isAdminOrCreator(chat, me)) {
-    return res.status(403).json({ message: "Admin only" });
+  const isAdmin = isAdminOrCreator(chat, me);
+  if (!isAdmin) {
+    if (
+      chat.type === "hangout" && typeof name === "string"
+    ) {
+      return res.status(403).json({ message: "Admin only" });
+    }
   }
 
   const update = {};
+  const unset = {};
+  let nextName = "";
+  let nicknameChanged = false;
+  let nextNickname = "";
+  let nicknameTargetId = "";
+  let nextNicknamesMap = null;
   if (typeof name === "string") {
     const clean = name.trim();
     const maxLen = chat.type === "hangout" ? 60 : 50;
@@ -397,11 +544,90 @@ router.patch("/:chatId/group", authRequired, async (req, res) => {
       return res.status(400).json({ message: "Name too long" });
     }
     update.name = clean;
+    nextName = clean;
+  }
+  if (nicknameUserId !== undefined) {
+    const targetId = String(nicknameUserId || "");
+    if (!mongoose.isValidObjectId(targetId)) {
+      return res.status(400).json({ message: "Invalid nickname user" });
+    }
+    const isTargetMember = chat.members.some(
+      (id) => String(id) === String(targetId)
+    );
+    if (!isTargetMember) {
+      return res.status(400).json({ message: "Nickname user not in chat" });
+    }
+    const cleanNick = typeof nickname === "string" ? nickname.trim() : "";
+    const currentNick =
+      chat.nicknames && typeof chat.nicknames.get === "function"
+        ? chat.nicknames.get(targetId) || ""
+        : (chat.nicknames || {})[targetId] || "";
+    if (cleanNick) {
+      if (cleanNick.length > 40) {
+        return res.status(400).json({ message: "Nickname too long" });
+      }
+      update[`nicknames.${targetId}`] = cleanNick;
+      nicknameChanged = cleanNick !== currentNick;
+      nextNickname = cleanNick;
+      nicknameTargetId = targetId;
+      nextNicknamesMap = {
+        ...(chat.nicknames && typeof chat.nicknames.get === "function"
+          ? Object.fromEntries(chat.nicknames)
+          : chat.nicknames || {}),
+        [targetId]: cleanNick,
+      };
+    } else if (currentNick) {
+      unset[`nicknames.${targetId}`] = "";
+      nicknameChanged = true;
+      nextNickname = "";
+      nicknameTargetId = targetId;
+      const base =
+        chat.nicknames && typeof chat.nicknames.get === "function"
+          ? Object.fromEntries(chat.nicknames)
+          : chat.nicknames || {};
+      delete base[targetId];
+      nextNicknamesMap = base;
+    }
+  }
+  if (typeof requireAdminApproval === "boolean") {
+    if (chat.type !== "group") {
+      return res.status(400).json({ message: "Not a group chat" });
+    }
+    if (!isAdminOrCreator(chat, me)) {
+      return res.status(403).json({ message: "Admin only" });
+    }
+    update.requireAdminApproval = requireAdminApproval;
   }
 
-  await Chat.updateOne({ _id: chatId }, { $set: update });
+  const updateOps = { $set: update };
+  if (Object.keys(unset).length > 0) {
+    updateOps.$unset = unset;
+  }
+  await Chat.updateOne({ _id: chatId }, updateOps);
   if (chat.type === "hangout" && update.name) {
     await Hangout.updateOne({ _id: chat.hangoutId }, { $set: { title: update.name } });
+  }
+  if (nextName && nextName !== String(chat.name || "")) {
+    const senderUser = await User.findById(me).select("username");
+    const text = `${senderUser?.username || "Someone"} changed the group name to ${nextName}`;
+    await emitSystemMessage(chatId, me, text);
+  }
+  if (nicknameChanged && nicknameTargetId) {
+    const senderUser = await User.findById(me).select("username");
+    const targetUser = await User.findById(nicknameTargetId).select("username");
+    if (nextNickname) {
+      const text = `${senderUser?.username || "Someone"} changed ${
+        targetUser?.username || "Someone"
+      }'s nickname to \"${nextNickname}\"`;
+      await emitSystemMessage(chatId, me, text);
+    }
+    const io = getIO();
+    if (io && nextNicknamesMap) {
+      io.to(String(chatId)).emit("chat:nicknames", {
+        chatId,
+        nicknames: nextNicknamesMap,
+      });
+    }
   }
   return res.json({ ok: true });
 });
@@ -469,6 +695,17 @@ router.post("/:chatId/avatar", authRequired, (req, res) => {
         { $set: { avatarUrl, avatarPublicId } }
       );
     }
+    const senderUser = await User.findById(me).select("username");
+    const text = `${senderUser?.username || "Someone"} updated the group photo`;
+    await emitSystemMessage(chatId, me, text);
+    const io = getIO();
+    if (io) {
+      io.to(String(chatId)).emit("chat:avatar", {
+        chatId,
+        avatarUrl,
+        avatarPublicId,
+      });
+    }
     return res.json({ avatarUrl });
   });
 });
@@ -495,6 +732,14 @@ router.post("/:chatId/members/:userId/remove", authRequired, async (req, res) =>
   if (!isMember) return res.status(403).json({ message: "Not a member" });
   if (!isAdminOrCreator(chat, me)) {
     return res.status(403).json({ message: "Admin only" });
+  }
+  if (
+    String(chat.creatorId) !== String(me) &&
+    (chat.admins || []).some((id) => String(id) === String(userId))
+  ) {
+    return res
+      .status(403)
+      .json({ message: "Only the creator can remove admins" });
   }
   if (String(chat.creatorId) === String(userId)) {
     return res.status(400).json({ message: "Cannot remove creator" });
@@ -531,7 +776,14 @@ router.post("/:chatId/members/:userId/remove", authRequired, async (req, res) =>
 
   await Chat.updateOne(
     { _id: chatId },
-    { $set: { lastMessageAt: msg.createdAt, lastMessageText: text } }
+    {
+      $set: {
+        lastMessageAt: msg.createdAt,
+        lastMessageText: text,
+        lastMessageId: msg._id,
+        lastMessageSenderId: msg.senderId,
+      },
+    }
   );
 
   const io = getIO();
@@ -548,6 +800,90 @@ router.post("/:chatId/members/:userId/remove", authRequired, async (req, res) =>
   res.json({ ok: true });
 });
 
+// POST /chats/:chatId/admins/:userId
+router.post("/:chatId/admins/:userId", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { chatId, userId } = req.params;
+
+  if (!mongoose.isValidObjectId(chatId)) {
+    return res.status(400).json({ message: "Invalid chatId" });
+  }
+  if (!mongoose.isValidObjectId(userId)) {
+    return res.status(400).json({ message: "Invalid userId" });
+  }
+
+  const chat = await Chat.findById(chatId).select(
+    "type members creatorId admins"
+  );
+  if (!chat) return res.status(404).json({ message: "Chat not found" });
+  if (chat.type !== "group") {
+    return res.status(400).json({ message: "Not a group chat" });
+  }
+
+  const isMember = chat.members.some((id) => String(id) === String(me));
+  if (!isMember) return res.status(403).json({ message: "Not a member" });
+  if (!isAdminOrCreator(chat, me)) {
+    return res.status(403).json({ message: "Admin only" });
+  }
+
+  const targetIsMember = chat.members.some((id) => String(id) === String(userId));
+  if (!targetIsMember) {
+    return res.status(400).json({ message: "User not in chat" });
+  }
+
+  await Chat.updateOne({ _id: chatId }, { $addToSet: { admins: userId } });
+
+  const adder = await User.findById(me).select("username");
+  const added = await User.findById(userId).select("username");
+  const text = `${adder?.username || "Someone"} made ${
+    added?.username || "someone"
+  } an admin`;
+  await emitSystemMessage(chatId, me, text);
+
+  res.json({ ok: true });
+});
+
+// DELETE /chats/:chatId/admins/:userId
+router.delete("/:chatId/admins/:userId", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { chatId, userId } = req.params;
+
+  if (!mongoose.isValidObjectId(chatId)) {
+    return res.status(400).json({ message: "Invalid chatId" });
+  }
+  if (!mongoose.isValidObjectId(userId)) {
+    return res.status(400).json({ message: "Invalid userId" });
+  }
+
+  const chat = await Chat.findById(chatId).select(
+    "type members creatorId admins"
+  );
+  if (!chat) return res.status(404).json({ message: "Chat not found" });
+  if (chat.type !== "group") {
+    return res.status(400).json({ message: "Not a group chat" });
+  }
+
+  const isMember = chat.members.some((id) => String(id) === String(me));
+  if (!isMember) return res.status(403).json({ message: "Not a member" });
+  if (String(chat.creatorId) !== String(me)) {
+    return res.status(403).json({ message: "Creator only" });
+  }
+  if (String(chat.creatorId) === String(userId)) {
+    return res.status(400).json({ message: "Cannot remove creator admin" });
+  }
+
+  await Chat.updateOne({ _id: chatId }, { $pull: { admins: userId } });
+
+  const remover = await User.findById(me).select("username");
+  const removed = await User.findById(userId).select("username");
+  const text = `${remover?.username || "Someone"} removed ${
+    removed?.username || "someone"
+  } as an admin`;
+  await emitSystemMessage(chatId, me, text);
+
+  res.json({ ok: true });
+});
+
 // POST /chats/:chatId/join-request
 router.post("/:chatId/join-request", authRequired, async (req, res) => {
   const me = req.user.userId;
@@ -557,7 +893,9 @@ router.post("/:chatId/join-request", authRequired, async (req, res) => {
     return res.status(400).json({ message: "Invalid chatId" });
   }
 
-  const chat = await Chat.findById(chatId).select("type members pendingJoinRequests");
+  const chat = await Chat.findById(chatId).select(
+    "type members pendingJoinRequests requireAdminApproval"
+  );
   if (!chat) return res.status(404).json({ message: "Chat not found" });
   if (chat.type !== "group") {
     return res.status(400).json({ message: "Not a group chat" });
@@ -571,12 +909,38 @@ router.post("/:chatId/join-request", authRequired, async (req, res) => {
     return res.status(409).json({ message: "Request already sent" });
   }
 
+  if (chat.requireAdminApproval !== true) {
+    await Chat.updateOne(
+      { _id: chatId },
+      {
+        $addToSet: { members: me },
+        $pull: { pendingJoinRequests: { userId: me } },
+      }
+    );
+    const joiner = await User.findById(me).select("username");
+    const text = `${joiner?.username || "Someone"} joined the chat`;
+    await emitSystemMessage(chatId, me, text);
+    return res.json({ ok: true, joined: true });
+  }
+
+  const requestedAt = new Date();
   await Chat.updateOne(
     { _id: chatId },
-    { $push: { pendingJoinRequests: { userId: me, requestedAt: new Date() } } }
+    { $push: { pendingJoinRequests: { userId: me, requestedAt } } }
   );
 
-  res.json({ ok: true });
+  const requester = await User.findById(me).select("username avatarUrl");
+  emitJoinRequest(chatId, {
+    user: {
+      id: requester?._id,
+      username: requester?.username || "Someone",
+      avatarUrl: resolveAvatar(requester),
+    },
+    requestedAt,
+  });
+  const text = `${requester?.username || "Someone"} requested to join the chat`;
+  await emitSystemMessage(chatId, me, text);
+  res.json({ ok: true, joined: false });
 });
 
 // POST /chats/:chatId/join-request/:userId/approve
@@ -610,6 +974,7 @@ router.post("/:chatId/join-request/:userId/approve", authRequired, async (req, r
       $pull: { pendingJoinRequests: { userId } },
     }
   );
+  emitJoinRequestResolved(chatId, userId);
 
   const added = await User.findById(userId).select("username");
   const text = `${added?.username || "Someone"} joined the chat`;
@@ -626,7 +991,14 @@ router.post("/:chatId/join-request/:userId/approve", authRequired, async (req, r
 
   await Chat.updateOne(
     { _id: chatId },
-    { $set: { lastMessageAt: msg.createdAt, lastMessageText: text } }
+    {
+      $set: {
+        lastMessageAt: msg.createdAt,
+        lastMessageText: text,
+        lastMessageId: msg._id,
+        lastMessageSenderId: msg.senderId,
+      },
+    }
   );
 
   const io = getIO();
@@ -671,6 +1043,7 @@ router.post("/:chatId/join-request/:userId/reject", authRequired, async (req, re
     { _id: chatId },
     { $pull: { pendingJoinRequests: { userId } } }
   );
+  emitJoinRequestResolved(chatId, userId);
 
   res.json({ ok: true });
 });
@@ -686,10 +1059,15 @@ router.get("/", authRequired, async (req, res) => {
     .sort({ lastMessageAt: -1, updatedAt: -1 })
     .populate("members", "username email avatarUrl")
     .select(
-      "_id type members name avatarUrl lastMessageAt lastMessageText createdAt updatedAt"
+      "_id type members name avatarUrl nicknames lastMessageAt lastMessageText lastMessageId lastMessageSenderId createdAt updatedAt"
     );
 
   const chatIds = chats.map((c) => c._id);
+
+  const readDocs = await ChatRead.find({
+    userId: me,
+    chatId: { $in: chatIds },
+  }).select("chatId lastReadMessageId readAt");
 
   const settingsDocs = await ChatSetting.find({
     userId: me,
@@ -697,24 +1075,76 @@ router.get("/", authRequired, async (req, res) => {
   }).select("chatId isPinned isMuted isIgnored hiddenAt");
 
   const settingsMap = new Map(settingsDocs.map((s) => [String(s.chatId), s]));
+  const readMap = new Map(readDocs.map((r) => [String(r.chatId), r]));
+  const directPairKeys = chats
+    .filter((c) => c.type === "direct")
+    .map((c) => {
+      const other = c.members.find((m) => String(m._id) !== String(me));
+      return other ? makePairKey(me, other._id) : null;
+    })
+    .filter(Boolean);
+  const blockedDocs = await Friendship.find({
+    pairKey: { $in: directPairKeys },
+    status: "blocked",
+  }).select("pairKey blockedBy status");
+  const blockedMap = new Map(
+    blockedDocs.map((d) => [String(d.pairKey), d])
+  );
 
   // Attach settings + filter hidden
   let out = chats
     .map((c) => {
       const s = settingsMap.get(String(c._id));
+      const read = readMap.get(String(c._id));
       const settings = {
         isPinned: s?.isPinned || false,
         isMuted: s?.isMuted || false,
         isIgnored: s?.isIgnored || false,
         hiddenAt: s?.hiddenAt || null,
       };
+      const readInfo = {
+        lastReadMessageId: read?.lastReadMessageId || null,
+        lastReadAt: read?.readAt || null,
+      };
 
       let otherUser = null;
       let displayName = c.type;
+      const nicknames =
+        c.nicknames && typeof c.nicknames.get === "function"
+          ? Object.fromEntries(c.nicknames)
+          : c.nicknames || {};
 
       if (c.type === "direct") {
         otherUser = c.members.find((m) => String(m._id) !== String(me)) || null;
-        displayName = otherUser?.username || "Direct chat";
+        const otherId = otherUser ? String(otherUser._id) : "";
+        const otherNick = otherId ? nicknames[otherId] : "";
+        displayName = otherNick || otherUser?.username || "Direct chat";
+        const pairKey = otherUser ? makePairKey(me, otherUser._id) : null;
+        const blockedDoc = pairKey ? blockedMap.get(String(pairKey)) : null;
+        const blockedByMe =
+          blockedDoc && String(blockedDoc.blockedBy) === String(me);
+        const blockedByOther =
+          blockedDoc && String(blockedDoc.blockedBy) !== String(me);
+        return {
+        ...c.toObject(),
+        displayName,
+        nicknames,
+        avatarUrl: null,
+        otherUser: otherUser
+          ? {
+                id: otherUser._id,
+                username: otherUser.username,
+                avatarUrl: resolveAvatar(otherUser),
+              }
+            : null,
+          settings,
+          ...readInfo,
+          blockStatus: {
+            isBlocked: Boolean(blockedDoc),
+            blockedByMe: Boolean(blockedByMe),
+            blockedByOther: Boolean(blockedByOther),
+          },
+        };
       } else if (c.type === "group") {
         displayName = c.name?.trim() || "Group chat";
       } else if (c.type === "hangout") {
@@ -724,6 +1154,7 @@ router.get("/", authRequired, async (req, res) => {
       return {
         ...c.toObject(),
         displayName,
+        nicknames,
         avatarUrl:
           c.type === "group" || c.type === "hangout" ? c.avatarUrl || null : null,
         otherUser: otherUser
@@ -734,6 +1165,7 @@ router.get("/", authRequired, async (req, res) => {
             }
           : null,
         settings,
+        ...readInfo,
       };
     })
     .filter((c) => !c.settings.hiddenAt);

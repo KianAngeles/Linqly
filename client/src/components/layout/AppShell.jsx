@@ -1,6 +1,8 @@
 import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import HeaderBar from "./HeaderBar";
+import IncomingCallModal from "../calls/IncomingCallModal";
+import UniversalChat from "../universal-chat/UniversalChat";
 import "./AppShell.css";
 
 export default function AppShell() {
@@ -13,6 +15,8 @@ export default function AppShell() {
           <Outlet />
         </main>
       </div>
+      <IncomingCallModal />
+      <UniversalChat />
     </div>
   );
 }

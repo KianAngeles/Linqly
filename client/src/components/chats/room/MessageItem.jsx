@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+
 export default function MessageItem({
   message,
   isMine,
@@ -23,7 +25,20 @@ export default function MessageItem({
   reactIcon,
   moreIcon,
   reactions,
+  seenIndicator,
+  onImageClick,
 }) {
+  const [showTimestamp, setShowTimestamp] = useState(false);
+  const hoverTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+      }
+    };
+  }, []);
+
   const formatBytes = (bytes) => {
     if (!bytes) return "0 B";
     const units = ["B", "KB", "MB", "GB"];
@@ -35,6 +50,34 @@ export default function MessageItem({
     return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
   };
   const isPending = Boolean(message.pending);
+  const shouldRenderBubble = Boolean(message.text) || Boolean(message.isDeletedMessage);
+  const timestampSource = message.createdAt || message.sentAt || message.updatedAt;
+  const formattedTimestamp = timestampSource
+    ? new Date(timestampSource).toLocaleString()
+    : "";
+  const isEmojiOnlyText = (() => {
+    const text = String(message.text || "").trim();
+    if (!text) return false;
+    const emojiLike = /^[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{Emoji}\uFE0F\u200D\s]+$/u;
+    if (!emojiLike.test(text)) return false;
+    return /[\p{Extended_Pictographic}\p{Emoji_Presentation}\p{Emoji}]/u.test(text);
+  })();
+
+  const handleMouseEnter = () => {
+    if (!formattedTimestamp) return;
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => {
+      setShowTimestamp(true);
+    }, 1000);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setShowTimestamp(false);
+  };
 
   return (
     <div>
@@ -47,22 +90,34 @@ export default function MessageItem({
       >
         {!isMine && (
           <div className="me-2 d-flex align-items-end" style={{ width: 38 }}>
-            {showAvatar && (
-              <img
-                src={senderAvatar}
-                alt={message.sender?.username || "Avatar"}
-                width={38}
-                height={38}
-                style={{ borderRadius: "50%", objectFit: "cover" }}
-              />
-            )}
+            {showAvatar &&
+              (senderAvatar ? (
+                <img
+                  src={senderAvatar}
+                  alt={message.displayName || message.sender?.username || "Avatar"}
+                  width={38}
+                  height={38}
+                  className="msg-avatar-img"
+                  style={{ borderRadius: "50%", objectFit: "cover" }}
+                />
+              ) : (
+                <div className="msg-avatar-fallback">
+                  {String(message.displayName || message.sender?.username || "?")
+                    .charAt(0)
+                    .toUpperCase()}
+                </div>
+              ))}
           </div>
         )}
-        <div className={`msg-wrap position-relative ${isMine ? "mine" : "theirs"}`}>
+        <div
+          className={`msg-wrap position-relative ${isMine ? "mine" : "theirs"}`}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
           {/* name */}
           {showName && (
             <div className="small text-muted mb-1">
-              {isMine ? "You" : message.sender?.username || "Unknown"}
+              {isMine ? "You" : message.displayName || message.sender?.username || "Unknown"}
             </div>
           )}
 
@@ -81,8 +136,8 @@ export default function MessageItem({
                   src={message.imageUrl}
                   alt="Shared"
                   className="msg-image"
+                  onClick={() => onImageClick?.(message)}
                 />
-                {isPending && <span className="msg-pending">Sending...</span>}
               </div>
             ) : message.type === "video" && message.fileUrl ? (
               <div className="msg-media-wrap">
@@ -93,12 +148,10 @@ export default function MessageItem({
                   />
                   Your browser does not support the video tag.
                 </video>
-                {isPending && <span className="msg-pending">Sending...</span>}
               </div>
             ) : message.type === "audio" && message.fileUrl ? (
               <div className="msg-media-wrap">
                 <audio className="msg-audio" controls src={message.fileUrl} />
-                {isPending && <span className="msg-pending">Sending...</span>}
               </div>
             ) : message.type === "file" && message.fileUrl ? (
               <div className="msg-media-wrap">
@@ -115,8 +168,25 @@ export default function MessageItem({
                     {formatBytes(message.fileSize || 0)}
                   </span>
                 </button>
-                {isPending && <span className="msg-pending">Sending...</span>}
               </div>
+            ) : message.type === "text" ? (
+              isEmojiOnlyText && !message.isDeletedMessage ? (
+                <div className="msg-emoji-only">
+                  {renderMessageText(message)}
+                </div>
+              ) : (
+                <div
+                  className={`msg-bubble ${
+                    message.isDeletedMessage
+                      ? "msg-bubble-deleted"
+                      : isMine
+                      ? "bg-primary text-white"
+                      : "msg-bubble-other"
+                  }`}
+                >
+                  {renderMessageText(message)}
+                </div>
+              )
             ) : (
               <div
                 className={`msg-bubble ${
@@ -128,6 +198,23 @@ export default function MessageItem({
                 }`}
               >
                 {renderMessageText(message)}
+              </div>
+            )}
+            {isPending && (
+              <div className="msg-pending-label">Sending...</div>
+            )}
+            {formattedTimestamp && showTimestamp && (
+              <div
+                className={`msg-timestamp-bubble ${
+                  isMine ? "msg-timestamp-right" : "msg-timestamp-left"
+                }`}
+              >
+                {formattedTimestamp}
+              </div>
+            )}
+            {reactions && (
+              <div className={`msg-reaction-corner ${isMine ? "mine" : "theirs"}`}>
+                {reactions}
               </div>
             )}
 
@@ -150,6 +237,7 @@ export default function MessageItem({
                       width={16}
                       height={16}
                       draggable="false"
+                      className="msg-more-icon"
                     />
                   </button>
                   <button
@@ -226,6 +314,7 @@ export default function MessageItem({
                       width={16}
                       height={16}
                       draggable="false"
+                      className="msg-more-icon"
                     />
                   </button>
                 </>
@@ -273,7 +362,11 @@ export default function MessageItem({
           </div>
         </div>
       </div>
-      {reactions}
+      {seenIndicator && (
+        <div className={`msg-seen ${isMine ? "msg-seen-mine" : "msg-seen-theirs"}`}>
+          {seenIndicator}
+        </div>
+      )}
     </div>
   );
 }

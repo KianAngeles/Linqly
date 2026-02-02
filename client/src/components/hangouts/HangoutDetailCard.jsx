@@ -1,4 +1,5 @@
 // src/components/hangouts/HangoutDetailCard.jsx
+import { useState } from "react";
 export default function HangoutDetailCard({
   selected,
   userLocation,
@@ -8,6 +9,7 @@ export default function HangoutDetailCard({
   isDetailLoading,
   shareEnabled,
   shareError,
+  shareLoading,
   shareNote,
   shareNoteError,
   driveDistanceLoading,
@@ -28,21 +30,22 @@ export default function HangoutDetailCard({
   onShareNoteChange,
 }) {
   if (!selected) return null;
+  const [showShared, setShowShared] = useState(false);
 
   return (
     <div className="card hangouts-detail-card shadow-sm">
-      <div className="card-body">
-        <div className="d-flex justify-content-between align-items-start">
-          <div>
-            <div className="fw-bold">{selected.title}</div>
-            <div className="text-muted small">
-              Hosted by {selected.creator?.username || "Unknown"}
-            </div>
+      <div className="hangouts-detail-header">
+        <div>
+          <div className="fw-bold">{selected.title}</div>
+          <div className="text-muted small">
+            Hosted by {selected.creator?.username || "Unknown"}
           </div>
-          <button type="button" className="btn-close" onClick={onClose} />
         </div>
+        <button type="button" className="btn-close" onClick={onClose} />
+      </div>
 
-        <div className="small mt-3">
+      <div className="hangouts-detail-body">
+        <div className="small">
           <div className="text-muted">Starts</div>
           <div>{formatDateTime(selected.startsAt)}</div>
           <div className="text-muted mt-2">Ends</div>
@@ -101,11 +104,22 @@ export default function HangoutDetailCard({
                 id="shareLocationToggle"
                 checked={shareEnabled}
                 onChange={onToggleShareLocation}
+                disabled={shareLoading}
               />
               <label className="form-check-label" htmlFor="shareLocationToggle">
                 Share my location with this hangout
               </label>
             </div>
+            {shareLoading && (
+              <div className="text-muted small mt-1 d-flex align-items-center gap-2">
+                <span
+                  className="spinner-border spinner-border-sm"
+                  role="status"
+                  aria-hidden="true"
+                />
+                Updating location...
+              </div>
+            )}
             {shareError && <div className="text-danger small mt-1">{shareError}</div>}
             {shareEnabled && (
               <div className="mt-2">
@@ -145,54 +159,63 @@ export default function HangoutDetailCard({
 
         {selected.sharedLocations?.length > 0 && (
           <div className="mt-3">
-            <div className="text-muted small mb-1">Shared locations</div>
-            <div className="d-grid gap-1">
-              {selected.sharedLocations
-                .filter((entry) => entry.user?.id)
-                .map((entry, idx) => {
-                  const coords = entry.location?.coordinates;
-                  const loc =
-                    coords && coords.length === 2
-                      ? { lng: coords[0], lat: coords[1] }
-                      : null;
-                  const km = distanceKm(userLocation, loc);
-                  return (
-                    <div key={entry.user?.id || idx} className="small">
-                      {entry.user?.username || "Someone"}
-                      {km !== null ? ` - ${km.toFixed(2)} km away` : ""}
-                    </div>
-                  );
-                })}
+            <div className="d-flex justify-content-between align-items-center mb-1">
+              <div className="text-muted small">Shared locations</div>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                onClick={() => setShowShared((v) => !v)}
+              >
+                {showShared ? "Hide" : "Show"}
+              </button>
             </div>
+            {showShared && (
+              <div className="d-grid gap-1">
+                {selected.sharedLocations
+                  .filter((entry) => entry.user?.id)
+                  .map((entry, idx) => {
+                    const coords = entry.location?.coordinates;
+                    const loc =
+                      coords && coords.length === 2
+                        ? { lng: coords[0], lat: coords[1] }
+                        : null;
+                    const km = distanceKm(userLocation, loc);
+                    return (
+                      <div key={entry.user?.id || idx} className="small">
+                        {entry.user?.username || "Someone"}
+                        {km !== null ? ` - ${km.toFixed(2)} km away` : ""}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           </div>
         )}
 
+      </div>
+
+      <div className="hangouts-detail-footer">
         {isDetailLoading ? (
-          <div className="text-muted small mt-3">Loading details...</div>
+          <div className="text-muted small">Loading details...</div>
         ) : (
-          <div className="d-grid gap-2 mt-3">
-            <button
-              type="button"
-              className={`btn ${isJoined ? "btn-outline-secondary" : "btn-primary"}`}
-              onClick={onJoinLeave}
-              disabled={isCreator || isFull}
-            >
-              {isCreator
-                ? "You created this hangout"
-                : isJoined
-                  ? "Leave"
-                  : isFull
-                    ? "Hangout full"
-                    : "Join"}
-            </button>
-            {isCreator && (
-              <button type="button" className="btn btn-outline-danger" onClick={onDelete}>
-                Delete hangout
+          <div className="d-grid gap-2">
+            {isCreator ? (
+              <button type="button" className="btn btn-primary" onClick={onEdit}>
+                Edit hangout
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={`btn ${isJoined ? "btn-outline-secondary" : "btn-primary"}`}
+                onClick={onJoinLeave}
+                disabled={isFull}
+              >
+                {isJoined ? "Leave" : isFull ? "Hangout full" : "Join"}
               </button>
             )}
             {isCreator && (
-              <button type="button" className="btn btn-outline-primary" onClick={onEdit}>
-                Edit hangout
+              <button type="button" className="btn btn-outline-danger" onClick={onDelete}>
+                Delete hangout
               </button>
             )}
           </div>

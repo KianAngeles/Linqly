@@ -100,7 +100,7 @@ function parseStartsEnds({ startsAt, endsAt, durationMinutes }) {
 // POST /hangouts
 router.post("/", authRequired, async (req, res) => {
   const me = req.user.userId;
-  const { title, description, visibility, location, lng, lat } = req.body;
+  const { title, description, visibility, location, lng, lat, createGroupChat } = req.body;
 
   if (!title || !title.trim()) {
     return res.status(400).json({ message: "Title is required" });
@@ -135,16 +135,18 @@ router.post("/", authRequired, async (req, res) => {
     attendeeIds: [me],
   });
 
-  await Chat.create({
-    type: "hangout",
-    members: [me],
-    name: doc.title,
-    creatorId: me,
-    admins: [me],
-    hangoutId: doc._id,
-    lastMessageAt: null,
-    lastMessageText: "",
-  });
+  if (createGroupChat !== false) {
+    await Chat.create({
+      type: "hangout",
+      members: [me],
+      name: doc.title,
+      creatorId: me,
+      admins: [me],
+      hangoutId: doc._id,
+      lastMessageAt: null,
+      lastMessageText: "",
+    });
+  }
 
   await doc.populate("creatorId", "username avatarUrl");
   await doc.populate("attendeeIds", "username avatarUrl");

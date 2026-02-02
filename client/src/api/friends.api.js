@@ -9,6 +9,21 @@ export const friendsApi = {
     apiFetch("/friends/presence", {
       headers: { Authorization: `Bearer ${accessToken}` },
     }),
+  locations: (accessToken) =>
+    apiFetch("/friends/locations", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }),
+  updateLocation: (accessToken, { lng, lat, note }) =>
+    apiFetch("/friends/location", {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ lng, lat, note }),
+    }),
+  stopLocation: (accessToken) =>
+    apiFetch("/friends/location/stop", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }),
 
   request: (accessToken, userId) =>
     apiFetch("/friends/request", {
@@ -33,6 +48,12 @@ export const friendsApi = {
 
   block: (accessToken, userId) =>
     apiFetch("/friends/block", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ userId }),
+    }),
+  unblock: (accessToken, userId) =>
+    apiFetch("/friends/unblock", {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ userId }),

@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { hangoutsApi } from "../api/hangouts.api";
+import { friendsApi } from "../api/friends.api";
 import { useAuth } from "../store/AuthContext";
 import { socket } from "../socket";
 import { API_BASE } from "../api/http";
 import pinIcon from "../assets/icons/pin.png";
 import "./HangoutsMap.css";
-import HangoutsMapHeader from "../components/hangouts/HangoutsMapHeader";
 import MapGate from "../components/hangouts/MapGate";
 import MapSearch from "../components/hangouts/MapSearch";
 import MapActions from "../components/hangouts/MapActions";
@@ -36,6 +36,17 @@ function formatDateTime(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString();
+}
+
+function formatDistance(meters) {
+  if (typeof meters !== "number") return "";
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${meters} m`;
+}
+
+function getInitial(value) {
+  if (!value) return "H";
+  return value.trim().charAt(0).toUpperCase();
 }
 
 function resolveAvatar(avatarUrl) {
@@ -76,6 +87,46 @@ function createHangoutPin(isDraft = false) {
   return el;
 }
 
+function createFriendMarker(user) {
+  const el = document.createElement("div");
+  el.className = "friend-location-marker";
+  const avatar = resolveAvatar(user?.avatarUrl);
+  if (avatar) {
+    el.style.backgroundImage = `url(${avatar})`;
+  } else {
+    el.style.backgroundColor = colorFromId(user?.id);
+    el.textContent = getInitial(user?.username);
+  }
+  return el;
+}
+
+function applyNoteBubble(el, note) {
+  const existing = el.querySelector(".location-note-bubble");
+  const trimmed = note ? note.trim().slice(0, 16) : "";
+  if (!trimmed) {
+    if (existing) existing.remove();
+    return;
+  }
+  const bubble = existing || document.createElement("div");
+  bubble.className = "location-note-bubble";
+  bubble.textContent = trimmed;
+  if (!existing) el.appendChild(bubble);
+}
+
+function createSelfShareMarker(user, note) {
+  const el = createFriendMarker(user);
+  applyNoteBubble(el, note);
+  return el;
+}
+
+function sortSearchResults(features = []) {
+  return [...features].sort((a, b) => {
+    const aPoi = a.place_type?.includes("poi") ? 1 : 0;
+    const bPoi = b.place_type?.includes("poi") ? 1 : 0;
+    return bPoi - aPoi;
+  });
+}
+
 export default function HangoutsMap() {
   const nav = useNavigate();
   const { user, accessToken, logout } = useAuth();
@@ -85,6 +136,8 @@ export default function HangoutsMap() {
   const draftMarkerRef = useRef(null);
   const sharedMarkersRef = useRef([]);
   const selfMarkerRef = useRef(null);
+  const selfAvatarMarkerRef = useRef(null);
+  const friendMarkersRef = useRef([]);
 
   const [center, setCenter] = useState(FALLBACK_CENTER);
   const [mapReady, setMapReady] = useState(false);
@@ -103,20 +156,33 @@ export default function HangoutsMap() {
   const [userLocation, setUserLocation] = useState(null);
   const [shareEnabled, setShareEnabled] = useState(false);
   const [shareError, setShareError] = useState("");
+  const [shareAllEnabled, setShareAllEnabled] = useState(false);
+  const [shareAllError, setShareAllError] = useState("");
+  const [shareAllLoading, setShareAllLoading] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareAllNote, setShareAllNote] = useState("");
+  const [friendLocations, setFriendLocations] = useState({});
   const [driveDistanceKm, setDriveDistanceKm] = useState(null);
   const [driveDistanceLoading, setDriveDistanceLoading] = useState(false);
   const [driveDistanceError, setDriveDistanceError] = useState("");
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
   const [routeVisible, setRouteVisible] = useState(false);
+  const [detailPlacement, setDetailPlacement] = useState(null);
+  const [showWithinList, setShowWithinList] = useState(true);
+  const [showJoinedList, setShowJoinedList] = useState(true);
+  const [showMyHangouts, setShowMyHangouts] = useState(false);
   const [shareNote, setShareNote] = useState("");
   const [shareNoteError, setShareNoteError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [searchCountry, setSearchCountry] = useState("ph");
   const searchRef = useRef(null);
   const [formError, setFormError] = useState("");
+  const [locating, setLocating] = useState(true);
+  const [locationEnabled, setLocationEnabled] = useState(null);
   const [formState, setFormState] = useState(() => ({
     title: "",
     description: "",
@@ -124,9 +190,39 @@ export default function HangoutsMap() {
     durationMinutes: 120,
     visibility: "friends",
     maxAttendees: "",
+    createGroupChat: true,
   }));
 
   const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN || "", []);
+
+  useEffect(() => {
+    const lang = navigator.language || "";
+    const region = lang.split("-")[1];
+    if (region) {
+      setSearchCountry(region.toLowerCase());
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!mapboxToken || !userLocation) return;
+    const params = new URLSearchParams({
+      access_token: mapboxToken,
+      types: "country",
+      limit: "1",
+    });
+    const url =
+      "https://api.mapbox.com/geocoding/v5/mapbox.places/" +
+      `${userLocation.lng},${userLocation.lat}.json?${params.toString()}`;
+    fetch(url)
+      .then((r) => r.json())
+      .then((data) => {
+        const code = data?.features?.[0]?.properties?.short_code;
+        if (code) {
+          setSearchCountry(code.toLowerCase());
+        }
+      })
+      .catch(() => {});
+  }, [mapboxToken, userLocation]);
 
   useEffect(() => {
     if (!mapboxToken) return;
@@ -183,6 +279,7 @@ export default function HangoutsMap() {
 
   useEffect(() => {
     if (!mapReady) return;
+    if (locationEnabled !== true) return;
     if (mapRef.current || !mapContainerRef.current) return;
     if (!mapboxToken) return;
 
@@ -240,6 +337,8 @@ export default function HangoutsMap() {
       setMapLoaded(true);
     });
     map.on("click", (e) => {
+      const target = e.originalEvent?.target;
+      if (target && target.closest(".map-overlay")) return;
       setDraftPin({ lng: e.lngLat.lng, lat: e.lngLat.lat });
       setShowCreate(true);
       setFormError("");
@@ -252,7 +351,7 @@ export default function HangoutsMap() {
       mapRef.current = null;
       map.remove();
     };
-  }, [center.lat, center.lng, mapboxToken, mapReady, radiusMeters, zoom]);
+  }, [center.lat, center.lng, mapboxToken, mapReady, radiusMeters, zoom, locationEnabled]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -264,17 +363,51 @@ export default function HangoutsMap() {
     mapRef.current.setZoom(zoom);
   }, [zoom]);
 
-  useEffect(() => {
-    if (!navigator.geolocation) return;
+  const requestLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocating(false);
+      setLocationEnabled(false);
+      return;
+    }
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const next = { lng: pos.coords.longitude, lat: pos.coords.latitude };
         setCenter(next);
         setUserLocation(next);
+        setLocating(false);
+        setLocationEnabled(true);
       },
-      () => {}
+      () => {
+        setLocating(false);
+        setLocationEnabled(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
     );
   }, []);
+
+  useEffect(() => {
+    requestLocation();
+  }, [requestLocation]);
+
+  useEffect(() => {
+    if (!navigator.permissions?.query) return undefined;
+    let active = true;
+    navigator.permissions
+      .query({ name: "geolocation" })
+      .then((status) => {
+        if (!active) return;
+        status.onchange = () => {
+          if (status.state === "granted") {
+            requestLocation();
+          }
+        };
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [requestLocation]);
 
   async function loadFeed(lng, lat) {
     if (!accessToken) return;
@@ -300,7 +433,12 @@ export default function HangoutsMap() {
 
   useEffect(() => {
     if (!accessToken) return;
-    const onNew = () => loadFeed(center.lng, center.lat);
+    const onNew = () => {
+      loadFeed(center.lng, center.lat);
+      if (selectedIdRef.current) {
+        loadDetails(selectedIdRef.current);
+      }
+    };
     socket.on("hangout:new", onNew);
     socket.on("hangout:update", onNew);
     return () => {
@@ -308,6 +446,58 @@ export default function HangoutsMap() {
       socket.off("hangout:update", onNew);
     };
   }, [accessToken, center.lat, center.lng]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      setFriendLocations({});
+      return;
+    }
+    let active = true;
+    friendsApi
+      .locations(accessToken)
+      .then((data) => {
+        if (!active) return;
+        const next = {};
+        for (const entry of data.locations || []) {
+          if (entry?.user?.id) next[entry.user.id] = entry;
+        }
+        setFriendLocations(next);
+      })
+      .catch(() => {
+        if (active) setFriendLocations({});
+      });
+    return () => {
+      active = false;
+    };
+  }, [accessToken]);
+
+  useEffect(() => {
+    function handleFriendLocation(payload) {
+      if (!payload?.user?.id) return;
+      setFriendLocations((prev) => ({
+        ...prev,
+        [payload.user.id]: payload,
+      }));
+    }
+
+    function handleFriendLocationStop(payload) {
+      const userId = payload?.userId;
+      if (!userId) return;
+      setFriendLocations((prev) => {
+        if (!prev[userId]) return prev;
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+    }
+
+    socket.on("friends:location", handleFriendLocation);
+    socket.on("friends:location:stop", handleFriendLocationStop);
+    return () => {
+      socket.off("friends:location", handleFriendLocation);
+      socket.off("friends:location:stop", handleFriendLocationStop);
+    };
+  }, []);
 
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) return;
@@ -327,6 +517,7 @@ export default function HangoutsMap() {
         e.stopPropagation();
         setSelectedId(h._id);
         setSelected(h);
+        setDetailPlacement("left");
       });
       markersRef.current.push(marker);
     }
@@ -389,7 +580,56 @@ export default function HangoutsMap() {
   }, [selected?.sharedLocations, mapLoaded]);
 
   useEffect(() => {
+    if (!mapRef.current || !mapLoaded) return;
+    friendMarkersRef.current.forEach((m) => m.remove());
+    friendMarkersRef.current = [];
+
+    for (const entry of Object.values(friendLocations)) {
+      if (entry?.user?.id && user?.id && String(entry.user.id) === String(user.id)) {
+        continue;
+      }
+      const coords = entry?.location;
+      if (!coords || typeof coords.lng !== "number" || typeof coords.lat !== "number")
+        continue;
+      const el = createFriendMarker(entry.user);
+      applyNoteBubble(el, entry.note);
+      const marker = new mapboxgl.Marker({
+        element: el,
+        anchor: "bottom",
+      })
+        .setLngLat([coords.lng, coords.lat])
+        .addTo(mapRef.current);
+      friendMarkersRef.current.push(marker);
+    }
+  }, [friendLocations, mapLoaded]);
+
+  useEffect(() => {
     if (!mapRef.current || !mapLoaded || !userLocation) return;
+
+    if (shareAllEnabled) {
+      if (selfMarkerRef.current) {
+        selfMarkerRef.current.remove();
+        selfMarkerRef.current = null;
+      }
+      if (selfAvatarMarkerRef.current) {
+        selfAvatarMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
+        applyNoteBubble(selfAvatarMarkerRef.current.getElement(), shareAllNote);
+        return;
+      }
+      const marker = new mapboxgl.Marker({
+        element: createSelfShareMarker(user, shareAllNote),
+        anchor: "bottom",
+      })
+        .setLngLat([userLocation.lng, userLocation.lat])
+        .addTo(mapRef.current);
+      selfAvatarMarkerRef.current = marker;
+      return;
+    }
+
+    if (selfAvatarMarkerRef.current) {
+      selfAvatarMarkerRef.current.remove();
+      selfAvatarMarkerRef.current = null;
+    }
     if (selfMarkerRef.current) {
       selfMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
       return;
@@ -400,7 +640,7 @@ export default function HangoutsMap() {
       .setLngLat([userLocation.lng, userLocation.lat])
       .addTo(mapRef.current);
     selfMarkerRef.current = marker;
-  }, [userLocation, mapLoaded]);
+  }, [userLocation, mapLoaded, shareAllEnabled, user, shareAllNote]);
 
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) return;
@@ -459,6 +699,73 @@ export default function HangoutsMap() {
     selected?.maxAttendees &&
     selected.attendeeCount >= selected.maxAttendees &&
     !isJoined;
+  const joinedHangouts = useMemo(
+    () =>
+      feed.filter((h) =>
+        (h.attendees || []).some((a) => String(a.id) === String(user?.id))
+      ),
+    [feed, user?.id]
+  );
+  const myHangouts = useMemo(
+    () => feed.filter((h) => String(h.creator?.id) === String(user?.id)),
+    [feed, user?.id]
+  );
+  const joinedHangoutIds = useMemo(
+    () => joinedHangouts.map((h) => h._id).filter(Boolean),
+    [joinedHangouts]
+  );
+  const shareTargets = useMemo(() => {
+    const ids = new Set();
+    if (shareEnabled && selected?._id && isJoined) {
+      ids.add(selected._id);
+    }
+    return Array.from(ids);
+  }, [shareEnabled, selected?._id, isJoined]);
+  const shareTargetsRef = useRef([]);
+  const shareNoteRef = useRef(shareNote);
+  const shareAllEnabledRef = useRef(shareAllEnabled);
+  const shareAllNoteRef = useRef(shareAllNote);
+  const selectedIdRef = useRef(null);
+  const shareWatchRef = useRef(null);
+  const lastShareSentRef = useRef(0);
+  const shareInFlightRef = useRef(false);
+
+  useEffect(() => {
+    shareTargetsRef.current = shareTargets;
+  }, [shareTargets]);
+
+  useEffect(() => {
+    shareAllNoteRef.current = shareAllNote;
+  }, [shareAllNote]);
+
+  useEffect(() => {
+    if (!shareAllEnabled || !accessToken || !userLocation) return;
+    const trimmed = shareAllNote.trim().slice(0, 16);
+    const timer = setTimeout(async () => {
+      try {
+        await friendsApi.updateLocation(accessToken, {
+          ...userLocation,
+          note: trimmed,
+        });
+      } catch (err) {
+        setShareAllError(err.message || "Failed to update note");
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [shareAllNote, shareAllEnabled, accessToken, userLocation]);
+
+  useEffect(() => {
+    shareNoteRef.current = shareNote;
+  }, [shareNote]);
+
+  useEffect(() => {
+    shareAllEnabledRef.current = shareAllEnabled;
+  }, [shareAllEnabled]);
+
+  useEffect(() => {
+    selectedIdRef.current = selected?._id || null;
+  }, [selected?._id]);
 
   useEffect(() => {
     if (!mapboxToken || !userLocation || !selected?.location?.coordinates) {
@@ -577,34 +884,77 @@ export default function HangoutsMap() {
   }, [selected?.sharedLocations, user?.id]);
 
   useEffect(() => {
-    if (!shareEnabled || !selected?._id || !isJoined || !accessToken) return;
-    if (!navigator.geolocation) return;
-    let lastSentAt = 0;
+    const shouldShare = shareAllEnabled || shareTargets.length > 0;
+    if (!accessToken || !shouldShare) {
+      if (shareWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(shareWatchRef.current);
+        shareWatchRef.current = null;
+      }
+      return;
+    }
+    if (!navigator.geolocation || shareWatchRef.current !== null) return;
+
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
+        if (shareInFlightRef.current) return;
         const next = { lng: pos.coords.longitude, lat: pos.coords.latitude };
         setUserLocation(next);
         const now = Date.now();
-        if (now - lastSentAt < 15000) return;
-        lastSentAt = now;
-        try {
-          const data = await hangoutsApi.shareLocation(accessToken, selected._id, {
-            ...next,
-            note: shareNote,
-          });
-          if (data?.hangout) setSelected(data.hangout);
-        } catch (err) {
-          setShareError(err.message || "Failed to share location");
+        if (now - lastShareSentRef.current < 30000) return;
+        lastShareSentRef.current = now;
+        shareInFlightRef.current = true;
+
+        const ids = shareTargetsRef.current;
+        for (const id of ids) {
+          try {
+            const data = await hangoutsApi.shareLocation(accessToken, id, {
+              ...next,
+              note: id === selectedIdRef.current ? shareNoteRef.current : "",
+            });
+            if (data?.hangout && id === selectedIdRef.current) {
+              setSelected(data.hangout);
+            }
+          } catch (err) {
+            const message = err.message || "Failed to share location";
+            if (shareAllEnabledRef.current) {
+              setShareAllError((prev) => (prev === message ? prev : message));
+            } else {
+              setShareError((prev) => (prev === message ? prev : message));
+            }
+          }
         }
+        if (shareAllEnabledRef.current) {
+          try {
+            await friendsApi.updateLocation(accessToken, {
+              ...next,
+              note: shareAllNoteRef.current,
+            });
+          } catch (err) {
+            const message = err.message || "Failed to share location";
+            setShareAllError((prev) => (prev === message ? prev : message));
+          }
+        }
+        shareInFlightRef.current = false;
       },
       () => {
-        setShareError("Location permission is required to share.");
+        const message = "Location permission is required to share.";
+        if (shareAllEnabledRef.current) {
+          setShareAllError((prev) => (prev === message ? prev : message));
+        } else {
+          setShareError((prev) => (prev === message ? prev : message));
+        }
       },
       { enableHighAccuracy: true, maximumAge: 10000 }
     );
 
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [shareEnabled, selected?._id, isJoined, accessToken]);
+    shareWatchRef.current = watchId;
+    return () => {
+      if (shareWatchRef.current === watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        shareWatchRef.current = null;
+      }
+    };
+  }, [accessToken, shareTargets.length, shareAllEnabled]);
 
   async function handleJoinLeave() {
     if (!selected || !accessToken) return;
@@ -656,6 +1006,9 @@ export default function HangoutsMap() {
       maxAttendees:
         formState.maxAttendees === "" ? null : Number(formState.maxAttendees),
     };
+    if (!isEditing) {
+      payload.createGroupChat = formState.createGroupChat !== false;
+    }
 
     try {
       if (isEditing && editingId) {
@@ -674,6 +1027,7 @@ export default function HangoutsMap() {
         durationMinutes: 120,
         visibility: "friends",
         maxAttendees: "",
+        createGroupChat: true,
       });
       await loadFeed(center.lng, center.lat);
       if (selectedId) await loadDetails(selectedId);
@@ -693,10 +1047,13 @@ export default function HangoutsMap() {
 
   async function handleToggleShareLocation() {
     if (!selected || !accessToken) return;
+    if (shareLoading) return;
     setShareError("");
+    setShareLoading(true);
     if (!shareEnabled) {
       if (!navigator.geolocation) {
         setShareError("Location is not supported on this device.");
+        setShareLoading(false);
         return;
       }
       navigator.geolocation.getCurrentPosition(
@@ -712,9 +1069,14 @@ export default function HangoutsMap() {
             setShareEnabled(true);
           } catch (err) {
             setShareError(err.message || "Failed to share location");
+          } finally {
+            setShareLoading(false);
           }
         },
-        () => setShareError("Location permission is required to share.")
+        () => {
+          setShareError("Location permission is required to share.");
+          setShareLoading(false);
+        }
       );
     } else {
       try {
@@ -723,7 +1085,52 @@ export default function HangoutsMap() {
         setShareEnabled(false);
       } catch (err) {
         setShareError(err.message || "Failed to stop sharing");
+      } finally {
+        setShareLoading(false);
       }
+    }
+  }
+
+  async function handleToggleShareAll() {
+    if (!accessToken) return;
+    if (shareAllLoading) return;
+    setShareAllError("");
+    setShareAllLoading(true);
+
+    if (!shareAllEnabled) {
+      if (!navigator.geolocation) {
+        setShareAllError("Location is not supported on this device.");
+        setShareAllLoading(false);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const next = { lng: pos.coords.longitude, lat: pos.coords.latitude };
+          setUserLocation(next);
+          setShareAllEnabled(true);
+          try {
+            await friendsApi.updateLocation(accessToken, { ...next, note: shareAllNote });
+          } catch (err) {
+            setShareAllError(err.message || "Failed to share location");
+          } finally {
+            setShareAllLoading(false);
+          }
+        },
+        () => {
+          setShareAllError("Location permission is required to share.");
+          setShareAllLoading(false);
+        }
+      );
+      return;
+    }
+
+    setShareAllEnabled(false);
+    try {
+      await friendsApi.stopLocation(accessToken);
+    } catch (err) {
+      setShareAllError(err.message || "Failed to stop sharing");
+    } finally {
+      setShareAllLoading(false);
     }
   }
 
@@ -738,11 +1145,13 @@ export default function HangoutsMap() {
     try {
       const params = new URLSearchParams({
         access_token: mapboxToken,
-        limit: "5",
+        limit: "10",
         proximity: `${center.lng},${center.lat}`,
-        country: "ph",
         types: "poi,place,address",
+        autocomplete: "true",
+        fuzzyMatch: "true",
       });
+      if (searchCountry) params.set("country", searchCountry);
       const url =
         "https://api.mapbox.com/geocoding/v5/mapbox.places/" +
         encodeURIComponent(q) +
@@ -750,7 +1159,7 @@ export default function HangoutsMap() {
       const r = await fetch(url);
       const data = await r.json();
       if (!r.ok) throw new Error(data?.message || "Search failed");
-      setSearchResults(data.features || []);
+      setSearchResults(sortSearchResults(data.features || []));
     } catch (err) {
       setSearchResults([]);
       setSearchError(err.message || "Search failed");
@@ -774,11 +1183,13 @@ export default function HangoutsMap() {
       try {
         const params = new URLSearchParams({
           access_token: mapboxToken,
-          limit: "5",
+          limit: "10",
           proximity: `${center.lng},${center.lat}`,
-          country: "ph",
           types: "poi,place,address",
+          autocomplete: "true",
+          fuzzyMatch: "true",
         });
+        if (searchCountry) params.set("country", searchCountry);
         const url =
           "https://api.mapbox.com/geocoding/v5/mapbox.places/" +
           encodeURIComponent(q) +
@@ -786,7 +1197,7 @@ export default function HangoutsMap() {
         const r = await fetch(url);
         const data = await r.json();
         if (!r.ok) throw new Error(data?.message || "Search failed");
-        setSearchResults(data.features || []);
+        setSearchResults(sortSearchResults(data.features || []));
       } catch (err) {
         setSearchResults([]);
         setSearchError(err.message || "Search failed");
@@ -886,88 +1297,316 @@ export default function HangoutsMap() {
     }
   }
 
-  return (
-    <div className="container py-4 hangouts-map-page" style={{ maxWidth: 1200 }}>
-      <HangoutsMapHeader
-        user={user}
-        onBack={() => nav("/app")}
-        onLogout={handleLogout}
-      />
+  function handleCloseDetail() {
+    setSelectedId(null);
+    setSelected(null);
+    setDetailPlacement(null);
+  }
 
+  function renderHangoutList(items, emptyCopy, onSelect) {
+    if (isLoading) {
+      return <div className="hangouts-panel-muted">Loading hangouts...</div>;
+    }
+    if (items.length === 0) {
+      return <div className="hangouts-panel-muted">{emptyCopy}</div>;
+    }
+    return (
+      <div className="hangouts-list">
+        {items.map((h) => (
+          <button
+            key={h._id}
+            type="button"
+            className={`hangout-list-item${selectedId === h._id ? " is-active" : ""}`}
+            onClick={() => {
+              setSelectedId(h._id);
+              setSelected(h);
+              if (onSelect) onSelect(h);
+            }}
+          >
+            <div className="hangout-list-avatar">
+              {getInitial(h.title || h.creator?.username)}
+            </div>
+            <div className="hangout-list-body">
+              <div className="hangout-list-title">{h.title || "Untitled"}</div>
+              <div className="hangout-list-subtitle">
+                {h.creator?.username || "Unknown"}
+              </div>
+              <div className="hangout-list-meta">
+                <span>{formatDistance(h.distanceMeters) || "Nearby"}</span>
+                <span>{h.timeLabel || formatDateTime(h.startsAt) || "Time TBD"}</span>
+              </div>
+              <div className="hangout-list-meta">
+                <span>{h.attendeeCount || h.attendees?.length || 0} attending</span>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="hangouts-map-page">
       {!mapboxToken && (
         <div className="alert alert-warning">
           Missing Mapbox token. Set VITE_MAPBOX_TOKEN to load the map.
         </div>
       )}
 
-      <div className="hangouts-map">
-        {!mapReady && <MapGate onLoadMap={handleShowMap} />}
+      <div className="hangouts-map-layout">
+        <div className="hangouts-map-center">
+          <div className={`hangouts-map ${locationEnabled === false ? "is-disabled" : ""}`}>
+            {!mapReady && <MapGate onLoadMap={handleShowMap} />}
 
-        <div ref={mapContainerRef} className="hangouts-map-canvas" />
+            <div ref={mapContainerRef} className="hangouts-map-canvas" />
 
-        {mapReady && (
-          <div className="map-hint">
-            Click on the map to drop a new hangout pin.
+            {mapReady && locating && (
+              <div className="map-locating map-overlay">
+                <span
+                  className="spinner-border spinner-border-sm"
+                  role="status"
+                  aria-hidden="true"
+                />
+                Locating...
+              </div>
+            )}
+
+            {mapReady && locationEnabled === false && (
+              <div className="map-location-disabled map-overlay">
+                <div className="map-location-disabled-title">
+                  We can’t access your location. Please enable location services to view the map.
+                </div>
+                <div className="map-location-disabled-subtitle">
+                  Enable location in your browser settings to continue.
+                </div>
+              </div>
+            )}
+
+            {mapReady && locationEnabled !== false && (
+              <div className="hangouts-map-toolbar map-overlay">
+                <RadiusControls
+                  radiusMeters={radiusMeters}
+                  onChangeRadius={(e) => setRadiusMeters(Number(e.target.value))}
+                />
+                <div className="hangouts-location-toggle">
+                  <div className="fw-semibold small">Friends only</div>
+                  <div className="form-check form-switch m-0">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="shareLocationAllToggle"
+                    checked={shareAllEnabled}
+                    onChange={handleToggleShareAll}
+                    disabled={shareAllLoading}
+                  />
+                    <label
+                      className="form-check-label small"
+                      htmlFor="shareLocationAllToggle"
+                    >
+                      Share with friends
+                    </label>
+                  </div>
+                  <div className="text-muted small">Friends can see you on the map</div>
+                  <div className="friends-only-note">
+                    <label className="form-label small mb-1" htmlFor="shareAllNote">
+                      Note
+                    </label>
+                    <input
+                      id="shareAllNote"
+                      className="form-control form-control-sm"
+                      maxLength={16}
+                      placeholder="On the way"
+                      value={shareAllNote}
+                      onChange={(e) => setShareAllNote(e.target.value)}
+                    />
+                  </div>
+                  {shareAllLoading && (
+                    <div className="text-muted small d-flex align-items-center gap-2">
+                      <span
+                        className="spinner-border spinner-border-sm"
+                        role="status"
+                        aria-hidden="true"
+                      />
+                      Updating location...
+                    </div>
+                  )}
+                  {shareAllError && (
+                    <div className="text-danger small">{shareAllError}</div>
+                  )}
+                </div>
+                <div className="map-joined-panel">
+                  <div className="map-joined-header">
+                    <div>
+                      <div className="fw-semibold small">
+                        {showMyHangouts ? "Created hangouts" : "Joined hangouts"}
+                      </div>
+                      <div className="text-muted small">
+                        {showMyHangouts ? myHangouts.length : joinedHangouts.length} in
+                        this area
+                      </div>
+                    </div>
+                    <div className="d-flex gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => setShowMyHangouts((prev) => !prev)}
+                      >
+                        {showMyHangouts ? "Joined" : "Created"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => setShowJoinedList((prev) => !prev)}
+                      >
+                        {showJoinedList ? "Hide" : "Show"}
+                      </button>
+                    </div>
+                  </div>
+                  {detailPlacement === "joined" && selected ? (
+                    <div className="map-joined-detail">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={handleCloseDetail}
+                      >
+                        Back
+                      </button>
+                      <HangoutDetailCard
+                        selected={selected}
+                        userLocation={userLocation}
+                        isCreator={isCreator}
+                        isJoined={isJoined}
+                        isFull={isFull}
+                        isDetailLoading={isDetailLoading}
+                        shareEnabled={shareEnabled}
+                        shareError={shareError}
+                        shareLoading={shareLoading}
+                        shareNote={shareNote}
+                        shareNoteError={shareNoteError}
+                        driveDistanceLoading={driveDistanceLoading}
+                        driveDistanceKm={driveDistanceKm}
+                        driveDistanceError={driveDistanceError}
+                        routeLoading={routeLoading}
+                        routeVisible={routeVisible}
+                        routeError={routeError}
+                        formatDateTime={formatDateTime}
+                        resolveAvatar={resolveAvatar}
+                        distanceKm={distanceKm}
+                        onClose={handleCloseDetail}
+                        onJoinLeave={handleJoinLeave}
+                        onDelete={handleDelete}
+                        onEdit={openEdit}
+                        onToggleShareLocation={handleToggleShareLocation}
+                        onToggleRoute={handleToggleRoute}
+                        onShareNoteChange={(e) => setShareNote(e.target.value)}
+                      />
+                    </div>
+                  ) : (
+                    showJoinedList && (
+                      <div className="map-joined-body">
+                        {renderHangoutList(
+                          showMyHangouts ? myHangouts : joinedHangouts,
+                          showMyHangouts
+                            ? "You have not created any hangouts yet."
+                            : "You have not joined any hangouts yet.",
+                          () => setDetailPlacement("joined")
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+            {mapReady && locationEnabled !== false && (
+              <div className="map-hint">
+                Click on the map to drop a new hangout pin.
+              </div>
+            )}
+
+            {mapReady && locationEnabled !== false && (
+              <MapSearch
+                searchRef={searchRef}
+                searchQuery={searchQuery}
+                onChangeSearchQuery={(e) => setSearchQuery(e.target.value)}
+                onSubmitSearch={handleSearch}
+                searchError={searchError}
+                searchResults={searchResults}
+                onSelectResult={handleSelectResult}
+              />
+            )}
+
+            {mapReady && locationEnabled !== false && (
+              <div className="map-left-stack map-overlay">
+                <div className="map-within-panel">
+                  <div className="map-within-header">
+                    <div className="map-within-meta">
+                      <div className="fw-semibold small">Within radius</div>
+                      <div className="text-muted small">
+                        {Math.round(radiusMeters / 1000)} km around you
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      onClick={() => setShowWithinList((prev) => !prev)}
+                    >
+                      {showWithinList ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                  {showWithinList && (
+                    <div className="map-within-body">
+                      {renderHangoutList(
+                        feed,
+                        "No hangouts within this radius yet.",
+                        () => setDetailPlacement("left")
+                      )}
+                    </div>
+                  )}
+                </div>
+                <MapActions onRecenter={handleRecenter} disabled={!userLocation} />
+                {detailPlacement === "left" && selected && (
+                  <HangoutDetailCard
+                    selected={selected}
+                    userLocation={userLocation}
+                    isCreator={isCreator}
+                    isJoined={isJoined}
+                    isFull={isFull}
+                    isDetailLoading={isDetailLoading}
+                    shareEnabled={shareEnabled}
+                    shareError={shareError}
+                    shareLoading={shareLoading}
+                    shareNote={shareNote}
+                    shareNoteError={shareNoteError}
+                    driveDistanceLoading={driveDistanceLoading}
+                    driveDistanceKm={driveDistanceKm}
+                    driveDistanceError={driveDistanceError}
+                    routeLoading={routeLoading}
+                    routeVisible={routeVisible}
+                    routeError={routeError}
+                    formatDateTime={formatDateTime}
+                    resolveAvatar={resolveAvatar}
+                    distanceKm={distanceKm}
+                    onClose={handleCloseDetail}
+                    onJoinLeave={handleJoinLeave}
+                    onDelete={handleDelete}
+                    onEdit={openEdit}
+                    onToggleShareLocation={handleToggleShareLocation}
+                    onToggleRoute={handleToggleRoute}
+                    onShareNoteChange={(e) => setShareNote(e.target.value)}
+                  />
+                )}
+              </div>
+            )}
+
+            <HangoutsLoadingEmpty
+              isLoading={isLoading}
+              mapReady={mapReady}
+              feedLength={feed.length}
+            />
+
           </div>
-        )}
-
-        {mapReady && (
-          <MapSearch
-            searchRef={searchRef}
-            searchQuery={searchQuery}
-            onChangeSearchQuery={(e) => setSearchQuery(e.target.value)}
-            onSubmitSearch={handleSearch}
-            searchError={searchError}
-            searchResults={searchResults}
-            onSelectResult={handleSelectResult}
-          />
-        )}
-
-        {mapReady && (
-          <MapActions onRecenter={handleRecenter} disabled={!userLocation} />
-        )}
-
-        {mapReady && (
-          <RadiusControls
-            radiusMeters={radiusMeters}
-            onChangeRadius={(e) => setRadiusMeters(Number(e.target.value))}
-          />
-        )}
-
-        <HangoutsLoadingEmpty
-          isLoading={isLoading}
-          mapReady={mapReady}
-          feedLength={feed.length}
-        />
-
-        <HangoutDetailCard
-          selected={selected}
-          userLocation={userLocation}
-          isCreator={isCreator}
-          isJoined={isJoined}
-          isFull={isFull}
-          isDetailLoading={isDetailLoading}
-          shareEnabled={shareEnabled}
-          shareError={shareError}
-          shareNote={shareNote}
-          shareNoteError={shareNoteError}
-          driveDistanceLoading={driveDistanceLoading}
-          driveDistanceKm={driveDistanceKm}
-          driveDistanceError={driveDistanceError}
-          routeLoading={routeLoading}
-          routeVisible={routeVisible}
-          routeError={routeError}
-          formatDateTime={formatDateTime}
-          resolveAvatar={resolveAvatar}
-          distanceKm={distanceKm}
-          onClose={() => setSelectedId(null)}
-          onJoinLeave={handleJoinLeave}
-          onDelete={handleDelete}
-          onEdit={openEdit}
-          onToggleShareLocation={handleToggleShareLocation}
-          onToggleRoute={handleToggleRoute}
-          onShareNoteChange={(e) => setShareNote(e.target.value)}
-        />
+        </div>
       </div>
 
       <HangoutModal

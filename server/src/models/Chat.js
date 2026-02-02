@@ -23,6 +23,8 @@ const chatSchema = new mongoose.Schema(
         requestedAt: { type: Date, default: Date.now },
       },
     ],
+    requireAdminApproval: { type: Boolean, default: false },
+    nicknames: { type: Map, of: String, default: {} },
 
     // For direct chat uniqueness: makePairKey(userA, userB)
     directKey: { type: String, unique: true, sparse: true },
@@ -32,6 +34,8 @@ const chatSchema = new mongoose.Schema(
 
     lastMessageAt: { type: Date, default: null },
     lastMessageText: { type: String, default: "" },
+    lastMessageId: { type: mongoose.Schema.Types.ObjectId, ref: "Message", default: null },
+    lastMessageSenderId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );

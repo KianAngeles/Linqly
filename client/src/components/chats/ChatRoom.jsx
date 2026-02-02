@@ -5,12 +5,17 @@ export default function ChatRoom({
   header,
   topContent,
   messageList,
+  typingIndicator,
   replyPreview,
+  composerTopContent,
   composer,
   messageCount = 0,
+  onStickToBottomChange,
+  onReachTop,
 }) {
   const listRef = useRef(null);
   const [stickToBottom, setStickToBottom] = useState(true);
+  const topTriggeredRef = useRef(false);
 
   const scrollToBottom = () => {
     const el = listRef.current;
@@ -21,8 +26,18 @@ export default function ChatRoom({
   const handleScroll = () => {
     const el = listRef.current;
     if (!el) return;
+    if (el.scrollTop <= 4) {
+      if (!topTriggeredRef.current) {
+        topTriggeredRef.current = true;
+        onReachTop?.();
+      }
+    } else if (topTriggeredRef.current) {
+      topTriggeredRef.current = false;
+    }
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setStickToBottom(distance < 24);
+    const atBottom = distance < 24;
+    setStickToBottom(atBottom);
+    onStickToBottomChange?.(atBottom);
   };
 
   useEffect(() => {
@@ -33,11 +48,13 @@ export default function ChatRoom({
 
   useEffect(() => {
     setStickToBottom(true);
+    onStickToBottomChange?.(true);
+    topTriggeredRef.current = false;
     requestAnimationFrame(scrollToBottom);
   }, [selectedChatId]);
 
   return (
-    <div className="border rounded p-3 chat-room-panel">
+    <div className="border rounded p-2 chat-room-panel">
       {!selectedChatId ? (
         <div className="text-muted">Select a chat to start.</div>
       ) : (
@@ -46,14 +63,18 @@ export default function ChatRoom({
           {topContent}
           <div
             ref={listRef}
-            className="border rounded p-2 mb-2 message-list chat-room-messages"
+            className=" rounded p-2 mb-2 message-list chat-room-messages"
             style={{ overflowY: "auto" }}
             onScroll={handleScroll}
           >
             {messageList}
           </div>
-          {replyPreview}
-          {composer}
+          {typingIndicator}
+          <div className="chat-composer-area">
+            {replyPreview}
+            {composerTopContent}
+            {composer}
+          </div>
         </>
       )}
     </div>

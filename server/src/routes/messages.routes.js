@@ -1,16 +1,18 @@
 const express = require("express");
-const http = require("http");
-const https = require("https");
 const mongoose = require("mongoose");
 const multer = require("multer");
 const Chat = require("../models/Chat");
 const Message = require("../models/Message");
+const Friendship = require("../models/Friendship");
 const { authRequired } = require("../middleware/authRequired");
 const { getIO } = require("../realtime");
 const ChatSetting = require("../models/ChatSetting");
 const User = require("../models/User");
 const { resolveAvatar } = require("../utils/avatar");
 const cloudinary = require("../utils/cloudinary");
+const { makePairKey } = require("../utils/pairKey");
+const http = require("http");
+const https = require("https");
 
 const router = express.Router();
 const uploadImage = multer({
@@ -79,6 +81,140 @@ function uploadToCloudinary(fileBuffer, options) {
     stream.end(fileBuffer);
   });
 }
+
+function extractLinks(text) {
+  if (!text) return [];
+  const matches = String(text).match(/https?:\/\/[^\s]+/gi);
+  return matches ? matches.map((m) => m.replace(/[),.;!?]+$/, "")) : [];
+}
+
+
+async function blockMessageSendIfNeeded({ chat, senderId, res }) {
+  if (!chat || chat.type !== "direct") return false;
+  const members = chat.members || [];
+  const other = members.find((m) => String(m._id || m) !== String(senderId));
+  if (!other) return false;
+
+  const pairKey = makePairKey(senderId, other._id || other);
+  const rel = await Friendship.findOne({ pairKey }).select("status blockedBy");
+  if (!rel || rel.status !== "blocked") return false;
+
+  const blockedByMe = String(rel.blockedBy) === String(senderId);
+  return res.status(403).json({
+    message: blockedByMe
+      ? "You blocked this user"
+      : "You have been blocked by this user",
+  });
+}
+
+/**
+ * GET /messages/attachments?chatId=...&kind=media|files|links&limit=...
+ */
+router.get("/attachments", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { chatId, kind } = req.query;
+  const limit = Math.min(parseInt(req.query.limit || "12", 10), 50);
+
+  if (!chatId) return res.status(400).json({ message: "chatId required" });
+  if (!mongoose.isValidObjectId(chatId)) {
+    return res.status(400).json({ message: "Invalid chatId" });
+  }
+
+  const chat = await Chat.findById(chatId).select("members");
+  if (!chat) return res.status(404).json({ message: "Chat not found" });
+  const isMember = chat.members.some((m) => String(m) === String(me));
+  if (!isMember) return res.status(403).json({ message: "Not a member" });
+
+  if (!["media", "files", "links"].includes(kind)) {
+    return res.status(400).json({ message: "Invalid kind" });
+  }
+
+  if (kind === "media") {
+    const docs = await Message.find({
+      chatId,
+      type: { $in: ["image", "video"] },
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("senderId", "username avatarUrl")
+      .select("type imageUrl fileUrl createdAt senderId");
+
+    const items = docs.map((m) => ({
+      id: m._id,
+      type: m.type,
+      url: m.type === "image" ? m.imageUrl : m.fileUrl,
+      createdAt: m.createdAt,
+      sender: {
+        id: m.senderId?._id,
+        username: m.senderId?.username || "Unknown",
+        avatarUrl: resolveAvatar(m.senderId),
+      },
+    }));
+
+    return res.json({ items });
+  }
+
+  if (kind === "files") {
+    const docs = await Message.find({
+      chatId,
+      type: "file",
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("senderId", "username avatarUrl")
+      .select("fileUrl fileName fileType fileSize createdAt senderId");
+
+    const items = docs.map((m) => ({
+      id: m._id,
+      fileUrl: m.fileUrl,
+      fileName: m.fileName || "file",
+      fileType: m.fileType || "",
+      fileSize: m.fileSize || 0,
+      createdAt: m.createdAt,
+      sender: {
+        id: m.senderId?._id,
+        username: m.senderId?.username || "Unknown",
+        avatarUrl: resolveAvatar(m.senderId),
+      },
+    }));
+
+    return res.json({ items });
+  }
+
+  const docs = await Message.find({
+    chatId,
+    type: "text",
+    text: { $regex: /https?:\/\//i },
+  })
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .populate("senderId", "username avatarUrl")
+    .select("text createdAt senderId");
+
+  const items = [];
+  for (const m of docs) {
+    const links = extractLinks(m.text);
+    links.forEach((url) => {
+      if (items.length < limit) {
+        items.push({
+          id: m._id,
+          url,
+          text: m.text || "",
+          createdAt: m.createdAt,
+          sender: {
+            id: m.senderId?._id,
+            username: m.senderId?.username || "Unknown",
+            avatarUrl: resolveAvatar(m.senderId),
+          },
+        });
+      }
+    });
+    if (items.length >= limit) break;
+  }
+
+  return res.json({ items });
+});
+
 
 /**
  * GET /messages?chatId=...&cursor=...
@@ -151,6 +287,7 @@ router.get("/", authRequired, async (req, res) => {
  * POST /messages { chatId, text, replyTo? }
  */
 router.post("/", authRequired, async (req, res) => {
+  const t0 = Date.now();
   const me = req.user.userId;
   const { chatId, text, replyTo } = req.body; // ✅ include replyTo
 
@@ -173,6 +310,7 @@ router.post("/", authRequired, async (req, res) => {
   );
   if (!isMember)
     return res.status(403).json({ message: "Not a member of this chat" });
+  if (await blockMessageSendIfNeeded({ chat, senderId: me, res })) return;
 
   let replyPreview = { text: "", senderUsername: "" };
   let replyToId = null;
@@ -244,7 +382,14 @@ router.post("/", authRequired, async (req, res) => {
 
   await Chat.updateOne(
     { _id: chatId },
-    { $set: { lastMessageAt: msg.createdAt, lastMessageText: cleanText } }
+    {
+      $set: {
+        lastMessageAt: msg.createdAt,
+        lastMessageText: cleanText,
+        lastMessageId: msg._id,
+        lastMessageSenderId: me,
+      },
+    }
   );
 
   const io = getIO();
@@ -267,7 +412,75 @@ router.post("/", authRequired, async (req, res) => {
     });
   }
 
+  if (process.env.CHAT_DEBUG === "true") {
+    console.log("[chat] send text", {
+      chatId: String(chatId),
+      userId: String(me),
+      elapsedMs: Date.now() - t0,
+    });
+  }
   res.status(201).json({ message: { id: msg._id, createdAt: msg.createdAt } });
+});
+
+/**
+ * POST /messages/system { chatId, text }
+ */
+router.post("/system", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { chatId, text } = req.body;
+
+  if (!chatId) return res.status(400).json({ message: "chatId required" });
+  if (!mongoose.isValidObjectId(chatId))
+    return res.status(400).json({ message: "Invalid chatId" });
+
+  const cleanText = String(text || "").trim();
+  if (!cleanText) return res.status(400).json({ message: "Text required" });
+  if (cleanText.length > 2000)
+    return res.status(400).json({ message: "Too long" });
+
+  const chat = await Chat.findById(chatId).select("members");
+  if (!chat) return res.status(404).json({ message: "Chat not found" });
+
+  const isMember = chat.members.some(
+    (m) => String(m._id || m) === String(me)
+  );
+  if (!isMember)
+    return res.status(403).json({ message: "Not a member of this chat" });
+
+  const msg = await Message.create({
+    chatId,
+    senderId: me,
+    type: "system",
+    text: cleanText,
+    replyTo: null,
+    replyPreview: { text: "", senderUsername: "" },
+    reactions: [],
+  });
+
+  await Chat.updateOne(
+    { _id: chatId },
+    {
+      $set: {
+        lastMessageAt: msg.createdAt,
+        lastMessageText: cleanText,
+        lastMessageId: msg._id,
+        lastMessageSenderId: me,
+      },
+    }
+  );
+
+  const io = getIO();
+  if (io) {
+    io.to(String(chatId)).emit("message:new", {
+      id: msg._id,
+      chatId,
+      type: msg.type,
+      text: msg.text,
+      createdAt: msg.createdAt,
+    });
+  }
+
+  res.json({ ok: true });
 });
 
 /**
@@ -297,6 +510,7 @@ router.post("/image", authRequired, (req, res) => {
     );
     if (!isMember)
       return res.status(403).json({ message: "Not a member of this chat" });
+    if (await blockMessageSendIfNeeded({ chat, senderId: me, res })) return;
 
     let replyPreview = { text: "", senderUsername: "" };
     let replyToId = null;
@@ -360,10 +574,17 @@ router.post("/image", authRequired, (req, res) => {
       { $set: { hiddenAt: null } }
     );
 
-    await Chat.updateOne(
-      { _id: chatId },
-      { $set: { lastMessageAt: msg.createdAt, lastMessageText: "[Image]" } }
-    );
+  await Chat.updateOne(
+    { _id: chatId },
+    {
+      $set: {
+        lastMessageAt: msg.createdAt,
+        lastMessageText: "[Image]",
+        lastMessageId: msg._id,
+        lastMessageSenderId: me,
+      },
+    }
+  );
 
     const io = getIO();
     if (io) {
@@ -421,6 +642,7 @@ router.post("/file", authRequired, (req, res) => {
     );
     if (!isMember)
       return res.status(403).json({ message: "Not a member of this chat" });
+    if (await blockMessageSendIfNeeded({ chat, senderId: me, res })) return;
 
     let replyPreview = { text: "", senderUsername: "" };
     let replyToId = null;
@@ -498,6 +720,8 @@ router.post("/file", authRequired, (req, res) => {
         $set: {
           lastMessageAt: msg.createdAt,
           lastMessageText: isVideo ? "[Video]" : "[File]",
+          lastMessageId: msg._id,
+          lastMessageSenderId: me,
         },
       }
     );
@@ -557,6 +781,7 @@ router.post("/voice", authRequired, (req, res) => {
     );
     if (!isMember)
       return res.status(403).json({ message: "Not a member of this chat" });
+    if (await blockMessageSendIfNeeded({ chat, senderId: me, res })) return;
 
     let replyPreview = { text: "", senderUsername: "" };
     let replyToId = null;
@@ -630,6 +855,8 @@ router.post("/voice", authRequired, (req, res) => {
         $set: {
           lastMessageAt: msg.createdAt,
           lastMessageText: "[Voice]",
+          lastMessageId: msg._id,
+          lastMessageSenderId: me,
         },
       }
     );
@@ -883,7 +1110,7 @@ router.delete("/:id", authRequired, async (req, res) => {
   const latest = await Message.find({ chatId })
     .sort({ createdAt: -1 })
     .limit(1)
-    .select("text imageUrl createdAt type");
+    .select("text imageUrl createdAt type senderId");
 
   if (latest.length) {
     const last = latest[0];
@@ -903,13 +1130,22 @@ router.delete("/:id", authRequired, async (req, res) => {
         $set: {
           lastMessageAt: last.createdAt,
           lastMessageText: lastLabel,
+          lastMessageId: last._id,
+          lastMessageSenderId: last.senderId || null,
         },
       }
     );
   } else {
     await Chat.updateOne(
       { _id: chatId },
-      { $set: { lastMessageAt: null, lastMessageText: "" } }
+      {
+        $set: {
+          lastMessageAt: null,
+          lastMessageText: "",
+          lastMessageId: null,
+          lastMessageSenderId: null,
+        },
+      }
     );
   }
 

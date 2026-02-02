@@ -14,7 +14,7 @@ export default function HangoutModal({
     <>
       <div className="modal-backdrop show" />
       <div className="modal d-block" tabIndex="-1" role="dialog">
-        <div className="modal-dialog">
+        <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content">
             <form onSubmit={onSubmit}>
               <div className="modal-header">
@@ -45,59 +45,82 @@ export default function HangoutModal({
                     maxLength={280}
                   />
                 </div>
-                <div className="mb-3">
-                  <label className="form-label">Starts At</label>
-                  <input
-                    type="datetime-local"
-                    className="form-control"
-                    value={formState.startsAt}
-                    onChange={(e) => onChangeField("startsAt", e.target.value)}
-                  />
+                <div className="row g-2 mb-2">
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Starts At</label>
+                    <input
+                      type="datetime-local"
+                      className="form-control"
+                      value={formState.startsAt}
+                      onChange={(e) => onChangeField("startsAt", e.target.value)}
+                    />
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Duration (minutes)</label>
+                    <input
+                      type="number"
+                      min="15"
+                      max="720"
+                      className="form-control"
+                      value={formState.durationMinutes}
+                      onChange={(e) =>
+                        onChangeField("durationMinutes", e.target.value)
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="mb-2">
-                  <label className="form-label">Duration (minutes)</label>
-                  <input
-                    type="number"
-                    min="15"
-                    max="720"
-                    className="form-control"
-                    value={formState.durationMinutes}
-                    onChange={(e) =>
-                      onChangeField("durationMinutes", e.target.value)
-                    }
-                  />
+                <div className="row g-2 mb-2">
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Visibility</label>
+                    <select
+                      className="form-select"
+                      value={formState.visibility}
+                      onChange={(e) => onChangeField("visibility", e.target.value)}
+                    >
+                      <option value="friends">Friends only</option>
+                      <option value="public">Public</option>
+                    </select>
+                  </div>
+                  <div className="col-12 col-md-6">
+                    <label className="form-label">Max Attendees (optional)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      className="form-control"
+                      value={formState.maxAttendees}
+                      onChange={(e) => onChangeField("maxAttendees", e.target.value)}
+                    />
+                  </div>
                 </div>
-                <div className="mb-2">
-                  <label className="form-label">Visibility</label>
-                  <select
-                    className="form-select"
-                    value={formState.visibility}
-                    onChange={(e) => onChangeField("visibility", e.target.value)}
-                  >
-                    <option value="friends">Friends only</option>
-                    <option value="public">Public</option>
-                  </select>
-                </div>
-                <div className="mb-2">
-                  <label className="form-label">Max Attendees (optional)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    className="form-control"
-                    value={formState.maxAttendees}
-                    onChange={(e) => onChangeField("maxAttendees", e.target.value)}
-                  />
-                </div>
+                {!isEditing && (
+                  <div className="mt-2">
+                    <div className="form-label mb-1">Create a Group Chat</div>
+                    <div className="form-check form-switch d-flex align-items-center gap-2">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="create-group-chat-toggle"
+                        checked={formState.createGroupChat !== false}
+                        onChange={(e) =>
+                          onChangeField("createGroupChat", e.target.checked)
+                        }
+                      />
+                      <span className="text-muted small">
+                        Adds a chat for attendees
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-outline-secondary"
+                  className="btn btn-outline-secondary hangout-cancel-btn"
                   onClick={onClose}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="btn btn-primary hangout-create-btn">
                   {isEditing ? "Save changes" : "Create"}
                 </button>
               </div>

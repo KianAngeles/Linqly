@@ -2,7 +2,9 @@
 export default function RadiusControls({ radiusMeters, onChangeRadius }) {
   return (
     <div className="radius-controls">
-      <div className="fw-semibold small">Radius</div>
+      <div className="fw-semibold small">
+        Radius <span className="text-muted">{(radiusMeters / 1000).toFixed(1)} km</span>
+      </div>
       <input
         type="range"
         min="1000"
@@ -11,7 +13,6 @@ export default function RadiusControls({ radiusMeters, onChangeRadius }) {
         value={radiusMeters}
         onChange={onChangeRadius}
       />
-      <div className="text-muted small">{(radiusMeters / 1000).toFixed(1)} km</div>
     </div>
   );
 }

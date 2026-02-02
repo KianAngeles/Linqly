@@ -143,6 +143,28 @@ export const chatsApi = {
     return data;
   },
 
+  async makeAdmin(accessToken, chatId, userId) {
+    const r = await fetch(`${API}/chats/${chatId}/admins/${userId}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "include",
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || "Failed to update admin");
+    return data;
+  },
+
+  async removeAdmin(accessToken, chatId, userId) {
+    const r = await fetch(`${API}/chats/${chatId}/admins/${userId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "include",
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || "Failed to update admin");
+    return data;
+  },
+
   async approveJoin(accessToken, chatId, userId) {
     const r = await fetch(`${API}/chats/${chatId}/join-request/${userId}/approve`, {
       method: "POST",
@@ -162,6 +184,16 @@ export const chatsApi = {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.message || "Failed to reject request");
+    return data;
+  },
+
+  async getReads(accessToken, chatId) {
+    const r = await fetch(`${API}/chats/${chatId}/reads`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "include",
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || "Failed to load reads");
     return data;
   },
 };

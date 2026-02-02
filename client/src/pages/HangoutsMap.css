@@ -1,11 +1,164 @@
-.hangouts-map {
-  position: relative;
+.hangouts-map-page {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+.hangouts-map-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-areas: "map";
+  gap: 0;
+  align-items: stretch;
+  height: 100%;
+}
+
+.hangouts-map-center {
+  grid-area: map;
+  display: grid;
+  gap: 0;
+  height: 100%;
+}
+
+.hangouts-map-toolbar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 3;
+  display: grid;
+  gap: 10px;
+}
+
+.hangouts-panel {
+  grid-area: nearby;
+  display: flex;
+  flex-direction: column;
   height: 70vh;
   min-height: 420px;
-  border-radius: 16px;
-  border: 1px solid #dee2e6;
+  overflow: hidden;
+}
+
+.hangouts-panel--nearby {
+  grid-area: nearby;
+}
+
+.hangouts-panel--joined {
+  grid-area: joined;
+}
+
+.hangouts-panel-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 12px;
+}
+
+.hangouts-panel-muted {
+  color: #6c757d;
+  font-size: 14px;
+  text-align: center;
+  padding: 24px 12px;
+}
+
+.hangouts-list {
+  display: grid;
+  gap: 10px;
+}
+
+.hangout-list-item {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  overflow: hidden;
+}
+
+.hangout-list-item:hover,
+.hangout-list-item:focus {
+  border-color: #cfe2ff;
+  box-shadow: 0 6px 16px rgba(13, 110, 253, 0.12);
+  outline: none;
+}
+
+.hangout-list-item.is-active {
+  border-color: #0d6efd;
+  box-shadow: 0 6px 16px rgba(13, 110, 253, 0.18);
+}
+
+.hangout-list-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #e9ecef;
+  color: #495057;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hangout-list-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #212529;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hangout-list-subtitle {
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.hangout-list-meta {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: #6c757d;
+}
+
+.hangouts-map {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  border-radius: 0;
+  border: none;
   overflow: hidden;
   background: #f8f9fa;
+}
+
+.hangouts-map.is-disabled {
+  filter: grayscale(0.2);
+}
+
+.map-location-disabled {
+  position: absolute;
+  inset: 0;
+  background: rgba(248, 249, 250, 0.88);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  color: #374151;
+}
+
+.map-location-disabled-title {
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.map-location-disabled-subtitle {
+  font-size: 13px;
+  color: #6b7280;
 }
 
 .hangouts-map-canvas {
@@ -36,6 +189,21 @@
   font-size: 12px;
 }
 
+.map-locating {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px 16px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
 .map-search {
   position: absolute;
   left: 16px;
@@ -44,7 +212,7 @@
   padding: 10px;
   border-radius: 12px;
   width: 260px;
-  z-index: 3;
+  z-index: 6;
 }
 
 .map-search .list-group {
@@ -53,27 +221,153 @@
 }
 
 .map-actions {
+  display: flex;
+}
+
+.map-recenter-btn {
+  border-radius: 999px;
+}
+
+.map-left-stack {
   position: absolute;
   left: 16px;
   top: 124px;
   z-index: 3;
+  display: grid;
+  gap: 10px;
+  width: 260px;
+}
+
+.map-left-stack .hangouts-detail-card {
+  position: static;
+  width: 100%;
+  max-height: 460px;
+  border: none;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.map-left-stack .hangouts-detail-body {
+  min-height: 0;
+}
+
+.map-left-stack .hangouts-detail-footer {
+  border-top: 1px solid #e9ecef;
+}
+
+.map-within-panel {
+  background: #fff;
+  padding: 10px 12px;
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  border: 1px solid #dee2e6;
+  box-shadow: 0 6px 16px rgba(13, 110, 253, 0.08);
+}
+
+.map-within-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.map-within-header .btn {
+  align-self: stretch;
+}
+
+.map-within-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.map-within-body {
+  max-height: 280px;
+  overflow: auto;
 }
 
 .radius-controls {
-  position: absolute;
-  left: 16px;
-  top: 168px;
-  background: rgba(255, 255, 255, 0.92);
+  background: #fff;
   padding: 10px 12px;
   border-radius: 12px;
   display: grid;
   gap: 6px;
-  width: 180px;
+  width: 260px;
   font-size: 12px;
+  border: 1px solid #dee2e6;
+  box-shadow: 0 6px 16px rgba(13, 110, 253, 0.08);
 }
 
 .radius-controls input[type="range"] {
   width: 100%;
+}
+
+.hangouts-location-toggle {
+  background: #fff;
+  padding: 10px 12px;
+  border-radius: 12px;
+  display: grid;
+  gap: 6px;
+  width: 260px;
+  font-size: 12px;
+  border: 1px solid #dee2e6;
+  box-shadow: 0 6px 16px rgba(13, 110, 253, 0.08);
+}
+
+.hangouts-location-toggle .form-check {
+  margin: 0;
+}
+
+.hangouts-location-toggle .form-check-input {
+  transform: scale(1.2);
+  margin-right: 0.35rem;
+}
+
+.map-joined-panel {
+  background: #fff;
+  padding: 10px 12px;
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  width: 260px;
+  font-size: 12px;
+  border: 1px solid #dee2e6;
+  box-shadow: 0 6px 16px rgba(13, 110, 253, 0.08);
+}
+
+.map-joined-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.map-joined-body {
+  max-height: 740px;
+  overflow: auto;
+}
+
+.map-joined-detail {
+  display: grid;
+  gap: 8px;
+}
+
+.map-joined-detail .hangouts-detail-card {
+  position: static;
+  width: 100%;
+  max-height: 440px;
+  border: none;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.map-joined-detail .hangouts-detail-body {
+  min-height: 0;
+}
+
+.map-joined-detail .hangouts-detail-footer {
+  border-top: 1px solid #e9ecef;
 }
 
 .map-loading {
@@ -113,11 +407,54 @@
 
 .hangouts-detail-card {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 320px;
-  max-height: calc(100% - 32px);
-  overflow: auto;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(300px, 96%);
+  max-height: none;
+  z-index: 4;
+  border: none;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.hangouts-detail-header {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.hangouts-detail-footer {
+  flex-shrink: 0;
+}
+
+.hangouts-detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.hangouts-detail-footer {
+  margin-top: auto;
+  padding: 12px 16px;
+  border-top: 1px solid #e9ecef;
+  background: #fff;
+}
+
+.hangout-cancel-btn {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.hangout-create-btn {
+  border-radius: 999px !important;
+  padding: 8px 20px !important;
 }
 
 .attendee-avatar,
@@ -192,12 +529,94 @@
   animation: pulse-core 2.4s ease-in-out infinite;
 }
 
+.friend-location-marker {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 16px rgba(0, 0, 0, 0.18);
+}
+
+.location-note-bubble {
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  transform: translate(-50%, -100%);
+  background: rgba(255, 255, 255, 0.95);
+  color: #212529;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
 .self-location-dot {
   width: 10px;
   height: 10px;
   border-radius: 999px;
   background: #0d6efd;
   box-shadow: 0 0 0 6px rgba(13, 110, 253, 0.15);
+}
+
+@media (max-width: 991px) {
+  .hangouts-map-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas: "map";
+  }
+
+  .hangouts-map {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .hangouts-panel {
+    height: auto;
+    min-height: 0;
+  }
+
+  .hangouts-map-toolbar {
+    left: 16px;
+    right: 16px;
+    top: auto;
+    bottom: 16px;
+    grid-template-columns: 1fr;
+  }
+
+  .map-left-stack {
+    width: calc(100% - 32px);
+  }
+
+  .map-left-stack .hangouts-detail-card {
+    max-height: 45vh;
+  }
+
+  .map-joined-detail .hangouts-detail-card {
+    max-height: 45vh;
+  }
+
+  .hangouts-detail-card {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    height: 100%;
+    width: 100%;
+    border: none;
+    box-shadow: none;
+  }
 }
 
 @keyframes pulse-core {
@@ -223,4 +642,7 @@
     transform: scale(1.5);
     opacity: 0;
   }
+}
+.hangout-list-body {
+  min-width: 0;
 }

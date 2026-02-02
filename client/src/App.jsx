@@ -11,6 +11,7 @@ import Settings from "./pages/Settings";
 import HangoutsMap from "./pages/HangoutsMap";
 import Friends from "./pages/Friends";
 import Home from "./pages/Home";
+import Call from "./pages/Call";
 
 
 function Protected({ children }) {
@@ -46,7 +47,14 @@ export default function App() {
           <Route path="friends" element={<Friends />} />
           <Route path="settings" element={<Settings />} />
         </Route>
-
+        <Route
+          path="/call"
+          element={
+            <Protected>
+              <Call />
+            </Protected>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

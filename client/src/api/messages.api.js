@@ -17,6 +17,7 @@ export const messagesApi = {
   },
 
   async send(accessToken, chatId, text, replyTo = null) {
+    const start = performance.now();
     const r = await fetch(`${API}/messages`, {
       method: "POST",
       headers: {
@@ -28,6 +29,10 @@ export const messagesApi = {
     });
 
     const data = await r.json();
+    if (import.meta.env.DEV) {
+      const elapsed = Math.round(performance.now() - start);
+      console.debug("[chat] send text", { chatId, elapsedMs: elapsed, ok: r.ok });
+    }
     if (!r.ok) throw new Error(data.message || "Failed to send");
     return data;
   },
@@ -130,6 +135,22 @@ export const messagesApi = {
     return data;
   },
 
+  async sendSystem(accessToken, chatId, text) {
+    const r = await fetch(`${API}/messages/system`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      credentials: "include",
+      body: JSON.stringify({ chatId, text }),
+    });
+
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || "Failed to send system message");
+    return data;
+  },
+
   async downloadFile(accessToken, messageId) {
     const r = await fetch(`${API}/messages/${messageId}/download`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -140,6 +161,22 @@ export const messagesApi = {
       throw new Error(data.message || "Failed to download file");
     }
     return r.blob();
+  },
+
+  async listAttachments(accessToken, chatId, kind, limit = 12) {
+    const url = new URL(`${API}/messages/attachments`);
+    url.searchParams.set("chatId", chatId);
+    url.searchParams.set("kind", kind);
+    url.searchParams.set("limit", String(limit));
+
+    const r = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "include",
+    });
+
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || "Failed to load attachments");
+    return data;
   },
 
 };

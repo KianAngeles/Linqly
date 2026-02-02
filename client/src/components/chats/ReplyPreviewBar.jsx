@@ -2,13 +2,13 @@ export default function ReplyPreviewBar({ replyingTo, onClose }) {
   if (!replyingTo) return null;
 
   return (
-    <div className="alert alert-light py-2 d-flex justify-content-between align-items-center">
+    <div className="alert alert-light py-2 d-flex justify-content-between align-items-center mb-2">
       <div>
         <div className="small text-muted">Replying to {replyingTo.senderName}</div>
         <div className="small">{replyingTo.text}</div>
       </div>
       <button
-        className="btn btn-sm btn-outline-secondary"
+        className="btn btn-sm btn-outline-secondary border-0"
         type="button"
         onClick={onClose}
       >

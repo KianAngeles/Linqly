@@ -17,8 +17,13 @@ export default function MessageComposer({
   onInsertEmoji,
   API_BASE,
   onSend,
+  onSendQuick,
   onSendImage,
   onSendVoice,
+  defaultSendEmoji = "👍",
+  placeholder = "Type message...",
+  disabled = false,
+  hideMicWhenTyping = false,
 }) {
   const textareaRef = useRef(null);
   const [pendingFiles, setPendingFiles] = useState([]);
@@ -39,9 +44,11 @@ export default function MessageComposer({
   const [recordedBlobUrl, setRecordedBlobUrl] = useState("");
   const [recordedFile, setRecordedFile] = useState(null);
   const [recordingError, setRecordingError] = useState("");
+  const lastSendAtRef = useRef(0);
   const [waveform, setWaveform] = useState(
     Array.from({ length: WAVE_BARS }, () => 0)
   );
+  const emojiPickerRef = useRef(null);
 
   const adjustTextarea = () => {
     if (!textareaRef.current) return;
@@ -124,6 +131,18 @@ export default function MessageComposer({
     adjustTextarea();
   }, [text, pendingFiles.length]);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!showEmojiPicker) return;
+      const el = emojiPickerRef.current;
+      if (el && !el.contains(event.target)) {
+        onToggleEmojiPicker();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker, onToggleEmojiPicker]);
+
   const setPendingFile = (file) => {
     if (!file) return;
     if (pendingFiles.length >= MAX_FILES) {
@@ -176,20 +195,29 @@ export default function MessageComposer({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (pendingFiles.length > 0) {
-      for (const item of pendingFiles) {
-        await onSendImage?.(item.file);
+    if (disabled) return;
+    const now = Date.now();
+    if (now - lastSendAtRef.current < 300) return;
+    lastSendAtRef.current = now;
+    try {
+      if (pendingFiles.length > 0) {
+        for (const item of pendingFiles) {
+          await onSendImage?.(item.file);
+        }
+        handleClearImage();
+        if (text.trim()) {
+          await onSend?.({ preventDefault() {} });
+        }
+        return;
       }
-      handleClearImage();
-      if (text.trim()) {
-        await onSend?.({ preventDefault() {} });
-      }
-      return;
+      await onSend?.(e);
+    } finally {
+      // allow next send immediately after short debounce window
     }
-    onSend(e);
   };
 
   const handlePaste = (e) => {
+    if (disabled) return;
     const items = e.clipboardData?.items || [];
     for (const item of items) {
       if (item.kind === "file") {
@@ -204,6 +232,7 @@ export default function MessageComposer({
 
   const startRecording = async () => {
     if (isRecording) return;
+    if (disabled) return;
     setRecordingError("");
     if (recordedBlobUrl) {
       URL.revokeObjectURL(recordedBlobUrl);
@@ -324,6 +353,9 @@ export default function MessageComposer({
     setRecordingTime(0);
   };
 
+  const isTyping = String(text || "").trim().length > 0;
+  const hideMic = hideMicWhenTyping && isTyping;
+
   return (
     <form className="d-flex gap-2" onSubmit={handleSubmit}>
       <div className="chat-input-stack flex-grow-1">
@@ -423,21 +455,28 @@ export default function MessageComposer({
           </div>
         )}
         {!isRecording && (
-          <div className="chat-input-row">
+          <div className={`chat-input-row ${hideMic ? "is-typing" : ""}`}>
             <div className="position-relative flex-grow-1">
-              <div className="form-control pe-5 chat-input-field">
+              <div className={`form-control pe-5 chat-input-field ${hideMic ? "is-typing" : ""}`}>
                 <textarea
                   ref={textareaRef}
                   className="chat-input-textarea"
-                  placeholder="Type message..."
+                  placeholder={placeholder}
                   value={text}
                   onChange={(e) => {
                     onChangeText(e.target.value);
                     adjustTextarea();
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit(e);
+                    }
+                  }}
                   onBlur={onInputBlur}
                   onPaste={handlePaste}
                   rows={1}
+                  disabled={disabled}
                 />
                 {fileError && (
                   <div className="chat-input-file-error" role="alert">
@@ -485,6 +524,7 @@ export default function MessageComposer({
                     multiple
                     className="d-none"
                     onChange={handleImageChange}
+                    disabled={disabled}
                   />
                 </label>
                 <button
@@ -492,12 +532,14 @@ export default function MessageComposer({
                   className="chat-input-action-btn"
                   onClick={onToggleEmojiPicker}
                   title="Emoji"
+                  disabled={disabled}
                 >
                   <img src={reactIcon} alt="Emoji" width={18} height={18} />
                 </button>
               </div>
               {showEmojiPicker && (
                 <div
+                  ref={emojiPickerRef}
                   className="position-absolute"
                   style={{ bottom: "46px", right: 0, zIndex: 30 }}
                 >
@@ -505,24 +547,46 @@ export default function MessageComposer({
                     onEmojiClick={(emojiData) =>
                       onInsertEmoji({ native: emojiData.emoji })
                     }
+                    previewConfig={{ showPreview: false }}
                     height={360}
                     width={320}
                   />
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              className="chat-voice-trigger"
-              onClick={startRecording}
-              disabled={isRecording}
-              title="Record voice"
-            >
-              <img src={micIcon} alt="Mic" width={18} height={18} />
-            </button>
-            <button className="chat-send-btn" type="submit">
-              <img src={sendIcon} alt="Send" width={18} height={18} />
-            </button>
+            <div className="chat-input-right-actions">
+              {!hideMic && (
+                <button
+                  type="button"
+                  className="chat-voice-trigger"
+                  onClick={startRecording}
+                  disabled={isRecording || disabled}
+                  title="Record voice"
+                >
+                  <img src={micIcon} alt="Mic" width={18} height={18} />
+                </button>
+              )}
+      <button
+        className="chat-send-btn"
+        type="button"
+        disabled={disabled}
+        onClick={(e) => {
+          if (text.trim()) {
+            handleSubmit(e);
+                  } else {
+                    onSendQuick?.(defaultSendEmoji);
+                  }
+                }}
+              >
+                {text.trim() ? (
+                  <img src={sendIcon} alt="Send" width={18} height={18} />
+                ) : (
+                  <span className="chat-send-emoji" aria-label="Like">
+                    {defaultSendEmoji}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
         )}
       </div>
