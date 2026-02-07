@@ -93,6 +93,7 @@ export default function ChatsPanel() {
   const [nicknameDraft, setNicknameDraft] = useState("");
   const [showFindMessage, setShowFindMessage] = useState(false);
   const [callDebug, setCallDebug] = useState("");
+  const [emptyDirectPeerProfile, setEmptyDirectPeerProfile] = useState(null);
   const [showEmojiModal, setShowEmojiModal] = useState(false);
   const [defaultSendEmoji, setDefaultSendEmoji] = useState("👍");
   const groupPhotoInputRef = useRef(null);
@@ -430,6 +431,57 @@ export default function ChatsPanel() {
       socket.off("presence:update", handlePresence);
     };
   }, [setChats]);
+
+  useEffect(() => {
+    if (!accessToken || !selectedChatId || !isDirectChat) {
+      setEmptyDirectPeerProfile(null);
+      return;
+    }
+
+    const username = String(
+      selectedChat?.otherUser?.username || directPeer?.username || ""
+    )
+      .replace(/^@+/, "")
+      .trim();
+
+    if (!username) {
+      setEmptyDirectPeerProfile(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    usersApi
+      .getByUsername(accessToken, username)
+      .then((data) => {
+        if (cancelled) return;
+        const userData = data?.user || null;
+        if (!userData) {
+          setEmptyDirectPeerProfile(null);
+          return;
+        }
+        const relationship = String(data?.relationship || "none");
+        setEmptyDirectPeerProfile({
+          avatarUrl: userData.avatarUrl || "",
+          displayName: userData.displayName || userData.username || username,
+          username: userData.username || username,
+          location: userData.location || null,
+          locationPrivacy: userData?.privacy?.location || "",
+          mutualFriendsCount: Number.isFinite(userData?.mutualFriendsCount)
+            ? userData.mutualFriendsCount
+            : 0,
+          relationship,
+          isFriend: relationship === "friends",
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setEmptyDirectPeerProfile(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, selectedChatId, isDirectChat, selectedChat?.otherUser?.username, directPeer?.username]);
 
 
   const settingsActions = selectedChatId ? (
@@ -1905,6 +1957,48 @@ export default function ChatsPanel() {
       .filter(Boolean)
       .filter((u) => String(u.id) !== String(user?.id));
   }, [typingByChat, selectedChatId, user?.id]);
+  const normalizeLocationPrivacy = (value) => {
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_");
+    if (normalized === "public") return "public";
+    if (normalized === "friends") return "friends";
+    if (normalized === "only_me" || normalized === "onlyme") return "only_me";
+    return "";
+  };
+  const showDirectChatEmptyState = Boolean(
+    selectedChat && isDirectChat && messages.length === 0
+  );
+  const emptyIntroDisplayName =
+    emptyDirectPeerProfile?.displayName || directPeerName || "User";
+  const emptyIntroUsername = String(
+    emptyDirectPeerProfile?.username ||
+      selectedChat?.otherUser?.username ||
+      directPeer?.username ||
+      ""
+  ).replace(/^@+/, "");
+  const emptyIntroMutualCount = Number.isFinite(emptyDirectPeerProfile?.mutualFriendsCount)
+    ? emptyDirectPeerProfile.mutualFriendsCount
+    : 0;
+  const emptyIntroMutualLabel =
+    emptyIntroMutualCount > 0
+      ? `${emptyIntroMutualCount} mutual friends`
+      : "No mutual friends";
+  const emptyIntroProvince =
+    typeof emptyDirectPeerProfile?.location === "string"
+      ? String(emptyDirectPeerProfile.location).trim()
+      : String(emptyDirectPeerProfile?.location?.province || "").trim();
+  const emptyIntroLocationPrivacy = normalizeLocationPrivacy(
+    emptyDirectPeerProfile?.locationPrivacy
+  );
+  const emptyIntroIsFriend =
+    emptyDirectPeerProfile?.isFriend === true ||
+    emptyDirectPeerProfile?.relationship === "friends";
+  const canShowEmptyIntroLocation = Boolean(emptyIntroProvince) && (
+    emptyIntroLocationPrivacy === "public" ||
+    (emptyIntroLocationPrivacy === "friends" && emptyIntroIsFriend)
+  );
 
   const handleStartCall = () => {
     if (!isDirectChat || !directPeerId || !selectedChatId) {
@@ -2271,12 +2365,32 @@ export default function ChatsPanel() {
             </>
           }
           messageList={
-            <>
-              {isLoadingOlder && (
-                <div className="chat-load-older-indicator">Loading older messages...</div>
-              )}
-              <MessageList items={messageItems} />
-            </>
+            showDirectChatEmptyState ? (
+              <div className="chat-empty-intro">
+                <div className="chat-empty-intro-avatar chat-empty-intro-avatar-fallback">
+                  {String(emptyIntroUsername || emptyIntroDisplayName || "?")
+                    .charAt(0)
+                    .toUpperCase()}
+                </div>
+                <div className="chat-empty-intro-name">{emptyIntroDisplayName}</div>
+                <div className="chat-empty-intro-handle">
+                  @{emptyIntroUsername || "user"}
+                </div>
+                {canShowEmptyIntroLocation && (
+                  <div className="chat-empty-intro-meta">
+                    Lives in {emptyIntroProvince}
+                  </div>
+                )}
+                <div className="chat-empty-intro-meta">{emptyIntroMutualLabel}</div>
+              </div>
+            ) : (
+              <>
+                {isLoadingOlder && (
+                  <div className="chat-load-older-indicator">Loading older messages...</div>
+                )}
+                <MessageList items={messageItems} />
+              </>
+            )
           }
           messageCount={visibleMessages.length}
           onReachTop={() => {

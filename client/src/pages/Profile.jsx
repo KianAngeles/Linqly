@@ -990,7 +990,12 @@ export default function Profile() {
               {avatarSrc ? (
                 <img src={avatarSrc} alt={profile.displayName} className="profile-avatar" />
               ) : (
-                <div className="profile-avatar profile-avatar-placeholder" />
+                <div className="profile-avatar profile-avatar-placeholder">
+                  {String(profile.username || profile.displayName || "?")
+                    .replace(/^@+/, "")
+                    .charAt(0)
+                    .toUpperCase()}
+                </div>
               )}
               {canEdit && (
                 <button

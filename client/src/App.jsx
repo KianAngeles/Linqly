@@ -13,6 +13,7 @@ import Friends from "./pages/Friends";
 import Home from "./pages/Home";
 import Call from "./pages/Call";
 import Profile from "./pages/Profile";
+import SearchResults from "./pages/SearchResults";
 
 
 function Protected({ children }) {
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="profile" element={<ProfileRedirect />} />
           <Route path="profile/:username" element={<Profile />} />
           <Route path="friends" element={<Friends />} />
+          <Route path="search" element={<SearchResults />} />
           <Route path="settings" element={<Settings />} />
         </Route>
         <Route

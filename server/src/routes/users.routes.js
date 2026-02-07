@@ -305,13 +305,13 @@ router.get("/search", authRequired, async (req, res) => {
     _id: { $ne: me },
     $or: [
       { username: { $regex: q, $options: "i" } },
-      { email: { $regex: q, $options: "i" } },
+      { displayName: { $regex: q, $options: "i" } },
     ],
   };
 
   const [users, total] = await Promise.all([
     User.find(filter)
-    .select("_id username displayName email avatarUrl avatarChoice")
+    .select("_id username displayName avatarUrl avatarChoice location privacy")
     .skip(skip)
     .limit(limit),
     User.countDocuments(filter),
@@ -375,14 +375,24 @@ router.get("/search", authRequired, async (req, res) => {
       }
     }
 
+    const isFriend = relationship === "friends";
+    const locationVisibility = normalizeVisibility(u?.privacy?.location);
+    const canShowLocation = canViewField(locationVisibility, {
+      isOwner: false,
+      isFriend,
+    });
+
     return {
+      _id: u._id,
       id: u._id,
       username: u.username,
       displayName: u.displayName || u.username,
-      email: u.email,
       avatarUrl: resolveAvatar(u),
       avatarChoice: u.avatarChoice || null,
+      location: canShowLocation ? u?.location?.province || "" : "",
       relationship,
+      friendStatus: relationship,
+      isFriend,
       mutualFriendsCount: mutualMap.get(String(u._id)) || 0,
     };
   });

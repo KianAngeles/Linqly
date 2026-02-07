@@ -154,7 +154,7 @@
 .profile-avatar-edit-bg {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(229, 231, 235, 0.92);
   border-radius: 50%;
   opacity: 0;
   transition: opacity 160ms ease;
@@ -178,16 +178,13 @@
 }
 
 .profile-avatar-placeholder {
-  background: rgba(15, 23, 42, 0.08);
-  position: relative;
-}
-
-.profile-avatar-placeholder::after {
-  content: "";
-  position: absolute;
-  inset: 22%;
-  border-radius: 50%;
-  background: rgba(15, 23, 42, 0.18);
+  background: #e5e7eb;
+  color: #111827;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 2rem;
 }
 
 .profile-online-dot {

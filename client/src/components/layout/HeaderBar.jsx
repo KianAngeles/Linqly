@@ -10,6 +10,7 @@ const pageTitles = [
   { pattern: "/app/chats/*", title: "Messenger" },
   { pattern: "/app/map", title: "Map" },
   { pattern: "/app/friends", title: "Friends" },
+  { pattern: "/app/search", title: "Search" },
   { pattern: "/app/profile/*", title: "Profile" },
   { pattern: "/app/settings", title: "Settings" },
 ];
@@ -163,11 +164,30 @@ export default function HeaderBar() {
   const dropdownItems = searchQuery.trim() ? searchResults : recentSearches;
   const showRecentHeader = !searchQuery.trim();
 
+  const submitSearch = () => {
+    const query = String(searchQuery || "").trim();
+    if (!query) return;
+    setIsDropdownOpen(false);
+    setHighlightedIndex(-1);
+    nav(`/app/search?query=${encodeURIComponent(query)}`);
+  };
+
   const handleSearchKeyDown = (e) => {
     const itemCount = dropdownItems.length;
     if (e.key === "Escape") {
       setIsDropdownOpen(false);
       setHighlightedIndex(-1);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (searchQuery.trim()) {
+        submitSearch();
+        return;
+      }
+      if (!isDropdownOpen || itemCount === 0) return;
+      if (highlightedIndex < 0 || highlightedIndex >= itemCount) return;
+      selectUser(dropdownItems[highlightedIndex]);
       return;
     }
     if (!isDropdownOpen || itemCount === 0) return;
@@ -181,14 +201,10 @@ export default function HeaderBar() {
       setHighlightedIndex((prev) => (prev <= 0 ? itemCount - 1 : prev - 1));
       return;
     }
-    if (e.key === "Enter") {
-      if (highlightedIndex < 0 || highlightedIndex >= itemCount) return;
-      e.preventDefault();
-      selectUser(dropdownItems[highlightedIndex]);
-    }
   };
 
   const avatarLetter = (user?.username || "?").slice(0, 1).toUpperCase();
+  const userAvatarUrl = resolveAvatarUrl(user?.avatarUrl || "");
 
   return (
     <header className="app-header border-bottom bg-white">
@@ -199,9 +215,14 @@ export default function HeaderBar() {
         </div>
 
         <div className="app-header-user-search-wrap" ref={searchWrapRef}>
-          <span className="app-header-user-search-icon" aria-hidden="true">
+          <button
+            type="button"
+            className="app-header-user-search-icon app-header-user-search-icon-btn"
+            aria-label="Search users"
+            onClick={submitSearch}
+          >
             <img src={searchIcon} alt="" />
-          </span>
+          </button>
           <input
             type="text"
             className="app-header-user-search-input"
@@ -344,7 +365,17 @@ export default function HeaderBar() {
               data-bs-toggle="dropdown"
               aria-expanded="false"
             >
-              <span className="avatar-pill">{avatarLetter}</span>
+              <span className="avatar-pill">
+                {userAvatarUrl ? (
+                  <img
+                    src={userAvatarUrl}
+                    alt={user?.username || "Account"}
+                    className="avatar-pill-image"
+                  />
+                ) : (
+                  avatarLetter
+                )}
+              </span>
               <span className="d-none d-md-inline">{user?.username || "Account"}</span>
             </button>
             <ul className="dropdown-menu dropdown-menu-end">

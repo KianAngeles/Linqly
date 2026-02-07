@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../store/AuthContext";
 import { usersApi } from "../api/users.api";
-import manAvatar from "../assets/avatars/man.png";
-import girlAvatar from "../assets/avatars/girl.png";
 import "./Settings.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -71,8 +69,8 @@ export default function Settings() {
       }
       return `${API_BASE}${user.avatarUrl}`;
     }
-    return user?.avatarChoice === "girl" ? girlAvatar : manAvatar;
-  }, [user?.avatarUrl, user?.avatarChoice]);
+    return "";
+  }, [user?.avatarUrl]);
 
   useEffect(() => {
     if (!pendingUrl) return;
@@ -267,13 +265,22 @@ export default function Settings() {
         <h5 className="fw-bold mb-3">Profile</h5>
 
         <div className="d-flex align-items-center gap-3 mb-3">
-          <img
-            src={previewUrl}
-            alt="Avatar"
-            width={72}
-            height={72}
-            style={{ borderRadius: "50%", objectFit: "cover" }}
-          />
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt="Avatar"
+              width={72}
+              height={72}
+              style={{ borderRadius: "50%", objectFit: "cover" }}
+            />
+          ) : (
+            <div
+              className="chat-settings-avatar chat-settings-avatar-fallback"
+              style={{ width: 72, height: 72, fontSize: "1.4rem" }}
+            >
+              {String(user?.username || "?").charAt(0).toUpperCase()}
+            </div>
+          )}
           <div>
             <div className="small text-muted mb-1">Upload avatar</div>
             <input
