@@ -10,7 +10,7 @@ const ChatSetting = require("../models/ChatSetting");
 const ChatRead = require("../models/ChatRead");
 const Hangout = require("../models/Hangout");
 const User = require("../models/User");
-const { getIO } = require("../realtime");
+const { getIO, onlineUsers } = require("../realtime");
 const { resolveAvatar } = require("../utils/avatar");
 const cloudinary = require("../utils/cloudinary");
 
@@ -1135,6 +1135,7 @@ router.get("/", authRequired, async (req, res) => {
                 id: otherUser._id,
                 username: otherUser.username,
                 avatarUrl: resolveAvatar(otherUser),
+                isOnline: onlineUsers.has(String(otherUser._id)),
               }
             : null,
           settings,

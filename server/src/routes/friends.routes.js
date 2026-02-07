@@ -266,9 +266,36 @@ router.get("/list", authRequired, async (req, res) => {
     status: { $in: ["pending", "accepted"] },
     $or: [{ requesterId: me }, { receiverId: me }],
   })
-    .populate("requesterId", "username email avatarUrl")
-    .populate("receiverId", "username email avatarUrl")
+    .populate("requesterId", "username email avatarUrl displayName")
+    .populate("receiverId", "username email avatarUrl displayName")
     .sort({ updatedAt: -1 });
+
+  const myFriendIds = await getFriendIds(me);
+  const myFriendSet = new Set(myFriendIds.map((id) => String(id)));
+  const otherIds = Array.from(
+    new Set(
+      docs
+        .map((d) => {
+          const requester = d.requesterId;
+          const receiver = d.receiverId;
+          const other = requester._id.toString() === me ? receiver : requester;
+          return other?._id ? String(other._id) : null;
+        })
+        .filter(Boolean)
+    )
+  );
+
+  const mutualMap = new Map();
+  await Promise.all(
+    otherIds.map(async (otherId) => {
+      const otherFriendIds = await getFriendIds(otherId);
+      let count = 0;
+      otherFriendIds.forEach((id) => {
+        if (myFriendSet.has(String(id))) count += 1;
+      });
+      mutualMap.set(String(otherId), count);
+    })
+  );
 
   const pendingIncoming = [];
   const pendingOutgoing = [];
@@ -284,8 +311,11 @@ router.get("/list", authRequired, async (req, res) => {
       user: {
         id: other._id,
         username: other.username,
+        displayName: other.displayName || null,
         email: other.email,
         avatarUrl: other.avatarUrl || null,
+        isOnline: onlineUsers.has(String(other._id)),
+        mutualFriendsCount: mutualMap.get(String(other._id)) || 0,
       },
       friendshipId: d._id,
       updatedAt: d.updatedAt,

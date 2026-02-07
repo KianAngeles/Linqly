@@ -977,6 +977,24 @@
   flex-shrink: 0;
 }
 
+.chat-list-avatar-wrap {
+  position: relative;
+  width: 50px;
+  height: 50px;
+  flex-shrink: 0;
+}
+
+.chat-list-online-dot {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2px solid #ffffff;
+}
+
 .chat-list-avatar-fallback {
   display: inline-flex;
   align-items: center;
@@ -1184,6 +1202,17 @@
   position: relative;
   width: 96px;
   height: 96px;
+}
+
+.chat-settings-online-dot {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2px solid #ffffff;
 }
 
 .chat-settings-avatar {
@@ -2311,6 +2340,73 @@
   padding: 10px;
 }
 
+.chat-add-members-section {
+  margin-bottom: 12px;
+}
+
+.chat-add-members-section-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #111;
+  margin-bottom: 6px;
+}
+
+.chat-add-members-scroll {
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.chat-add-member-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+}
+
+.chat-add-member-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px;
+  border-radius: 12px;
+  background: transparent;
+  font-size: 0.8rem;
+}
+
+.chat-add-member-chip-avatar-wrap {
+  position: relative;
+  width: 38px;
+  height: 38px;
+}
+
+.chat-add-member-chip-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.chat-add-member-chip-label {
+  font-weight: 500;
+  text-align: center;
+}
+
+.chat-add-member-chip-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  border: none;
+  background: #0f172a;
+  color: #fff;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .chat-add-member-search {
   margin-bottom: 10px;
   padding: 6px 10px;
@@ -2333,6 +2429,14 @@
   display: block;
 }
 
+.chat-add-member-row:hover {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.chat-add-member-row:hover .chat-add-member-toggle {
+  border-color: rgba(37, 99, 235, 0.8);
+}
+
 .chat-add-member-avatar {
   width: 28px;
   height: 28px;
@@ -2349,6 +2453,30 @@
   color: #111;
   font-weight: 600;
   font-size: 0.75rem;
+}
+
+.chat-add-member-added {
+  font-size: 0.75rem;
+  color: rgba(15, 23, 42, 0.55);
+  font-weight: 600;
+}
+
+.chat-add-member-toggle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(37, 99, 235, 0.5);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  pointer-events: none;
+}
+
+.chat-add-member-toggle.is-selected {
+  background: #2563eb;
+  border-color: #2563eb;
 }
 
 .chat-add-member-check {

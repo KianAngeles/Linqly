@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../store/AuthContext";
 import { usersApi } from "../api/users.api";
 import manAvatar from "../assets/avatars/man.png";
@@ -11,8 +11,10 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 export default function Settings() {
   const { user, accessToken, setUser } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
   const imgRef = useRef(null);
   const dragRef = useRef(null);
+  const privacyRef = useRef(null);
 
   const [username, setUsername] = useState(user?.username || "");
   const [saving, setSaving] = useState(false);
@@ -24,13 +26,43 @@ export default function Settings() {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const [privacySettings, setPrivacySettings] = useState({
+    gender: "Public",
+    birthday: "Friends",
+    location: "Friends",
+    interests: "Public",
+    about: "Public",
+    friends: "Friends",
+    hangoutsCreated: "Friends",
+    hangoutsJoined: "Only me",
+  });
 
   const VIEW_SIZE = 320;
   const CROP_DIAMETER = 240;
+  const isPrivacyTab = useMemo(
+    () => new URLSearchParams(location.search).get("tab") === "privacy",
+    [location.search]
+  );
+
+  useEffect(() => {
+    if (!isPrivacyTab || !privacyRef.current) return;
+    privacyRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [isPrivacyTab]);
 
   useEffect(() => {
     setUsername(user?.username || "");
   }, [user?.username]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    usersApi
+      .getPrivacy(accessToken)
+      .then((data) => {
+        if (!data?.privacy) return;
+        setPrivacySettings((prev) => ({ ...prev, ...data.privacy }));
+      })
+      .catch(() => {});
+  }, [accessToken]);
 
   const previewUrl = useMemo(() => {
     if (user?.avatarUrl) {
@@ -183,6 +215,19 @@ export default function Settings() {
     setImgMeta(null);
   }
 
+  async function updatePrivacy(key, value) {
+    setPrivacySettings((prev) => ({ ...prev, [key]: value }));
+    if (!accessToken) return;
+    try {
+      const data = await usersApi.updatePrivacy(accessToken, { [key]: value });
+      if (data?.privacy) {
+        setUser((prev) => ({ ...(prev || {}), privacy: data.privacy }));
+      }
+    } catch {
+      // keep UI responsive even if save fails
+    }
+  }
+
 
   async function onSave(e) {
     e.preventDefault();
@@ -218,7 +263,7 @@ export default function Settings() {
       {err && <div className="alert alert-danger">{err}</div>}
       {ok && <div className="alert alert-success">{ok}</div>}
 
-      <div className="border rounded p-3">
+      <div className="border rounded p-3 mb-4">
         <h5 className="fw-bold mb-3">Profile</h5>
 
         <div className="d-flex align-items-center gap-3 mb-3">
@@ -323,6 +368,162 @@ export default function Settings() {
             {saving ? "Saving..." : "Save"}
           </button>
         </form>
+      </div>
+
+      <div ref={privacyRef} className="border rounded p-3 privacy-card">
+        <h5 className="fw-bold mb-3">Privacy</h5>
+        <div className="privacy-row">
+          <div>
+            <div className="privacy-label">Gender</div>
+            <div className="text-muted small">Control who can see your gender.</div>
+          </div>
+          <div className="privacy-toggle">
+            {["Public", "Friends", "Only me"].map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className={`privacy-option ${privacySettings.gender === opt ? "is-active" : ""}`}
+                onClick={() => updatePrivacy("gender", opt)}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="privacy-row">
+          <div>
+            <div className="privacy-label">Birthday / Age</div>
+            <div className="text-muted small">Control who can see your birthday.</div>
+          </div>
+          <div className="privacy-toggle">
+            {["Public", "Friends", "Only me"].map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className={`privacy-option ${privacySettings.birthday === opt ? "is-active" : ""}`}
+                onClick={() => updatePrivacy("birthday", opt)}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="privacy-row">
+          <div>
+            <div className="privacy-label">Location</div>
+            <div className="text-muted small">Control who can see your location.</div>
+          </div>
+          <div className="privacy-toggle">
+            {["Public", "Friends", "Only me"].map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className={`privacy-option ${privacySettings.location === opt ? "is-active" : ""}`}
+                onClick={() => updatePrivacy("location", opt)}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="privacy-row">
+          <div>
+            <div className="privacy-label">Interests</div>
+            <div className="text-muted small">Control who can see your interests.</div>
+          </div>
+          <div className="privacy-toggle">
+            {["Public", "Friends", "Only me"].map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className={`privacy-option ${privacySettings.interests === opt ? "is-active" : ""}`}
+                onClick={() => updatePrivacy("interests", opt)}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="privacy-row">
+          <div>
+            <div className="privacy-label">About Me</div>
+            <div className="text-muted small">Control who can see your about section.</div>
+          </div>
+          <div className="privacy-toggle">
+            {["Public", "Friends", "Only me"].map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className={`privacy-option ${privacySettings.about === opt ? "is-active" : ""}`}
+                onClick={() => updatePrivacy("about", opt)}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="privacy-row">
+          <div>
+            <div className="privacy-label">Friends List</div>
+            <div className="text-muted small">Control who can see your friends list.</div>
+          </div>
+          <div className="privacy-toggle">
+            {["Public", "Friends", "Only me"].map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className={`privacy-option ${privacySettings.friends === opt ? "is-active" : ""}`}
+                onClick={() => updatePrivacy("friends", opt)}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="privacy-row">
+          <div>
+            <div className="privacy-label">Created Hangouts</div>
+            <div className="text-muted small">
+              Control who can see hangouts you created.
+            </div>
+          </div>
+          <div className="privacy-toggle">
+            {["Public", "Friends", "Only me"].map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className={`privacy-option ${
+                  privacySettings.hangoutsCreated === opt ? "is-active" : ""
+                }`}
+                onClick={() => updatePrivacy("hangoutsCreated", opt)}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="privacy-row">
+          <div>
+            <div className="privacy-label">Joined Hangouts</div>
+            <div className="text-muted small">
+              Control who can see hangouts you joined.
+            </div>
+          </div>
+          <div className="privacy-toggle">
+            {["Public", "Friends", "Only me"].map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className={`privacy-option ${
+                  privacySettings.hangoutsJoined === opt ? "is-active" : ""
+                }`}
+                onClick={() => updatePrivacy("hangoutsJoined", opt)}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

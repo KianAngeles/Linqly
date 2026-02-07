@@ -12,11 +12,20 @@ import HangoutsMap from "./pages/HangoutsMap";
 import Friends from "./pages/Friends";
 import Home from "./pages/Home";
 import Call from "./pages/Call";
+import Profile from "./pages/Profile";
 
 
 function Protected({ children }) {
   const { user } = useAuth();
   return user ? children : <Navigate to="/" replace />;
+}
+
+function ProfileRedirect() {
+  const { user } = useAuth();
+  const usernameRaw = user?.username ? String(user.username) : "";
+  const username = usernameRaw.replace(/^@+/, "");
+  if (!username) return <Navigate to="/app" replace />;
+  return <Navigate to={`/app/profile/${username}`} replace />;
 }
 
 export default function App() {
@@ -44,6 +53,8 @@ export default function App() {
           <Route path="chats" element={<ChatsPanel />} />
           <Route path="chats/:chatId" element={<ChatsPanel />} />
           <Route path="map" element={<HangoutsMap />} />
+          <Route path="profile" element={<ProfileRedirect />} />
+          <Route path="profile/:username" element={<Profile />} />
           <Route path="friends" element={<Friends />} />
           <Route path="settings" element={<Settings />} />
         </Route>

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import dayjs from "dayjs";
 import { hangoutsApi } from "../api/hangouts.api";
 import { friendsApi } from "../api/friends.api";
 import { useAuth } from "../store/AuthContext";
 import { socket } from "../socket";
 import { API_BASE } from "../api/http";
 import pinIcon from "../assets/icons/pin.png";
+import showIcon from "../assets/icons/map-icons/show.png";
+import hiddenIcon from "../assets/icons/map-icons/hidden.png";
 import "./HangoutsMap.css";
 import MapGate from "../components/hangouts/MapGate";
 import MapSearch from "../components/hangouts/MapSearch";
@@ -20,16 +23,7 @@ import HangoutModal from "../components/hangouts/HangoutModal";
 const FALLBACK_CENTER = { lng: 120.9842, lat: 14.5995 };
 const DEFAULT_RADIUS_METERS = 8000;
 const MAP_STATE_KEY = "linqly.hangouts.mapState";
-
-function toLocalInputValue(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  const yyyy = date.getFullYear();
-  const mm = pad(date.getMonth() + 1);
-  const dd = pad(date.getDate());
-  const hh = pad(date.getHours());
-  const mi = pad(date.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
-}
+const HANGOUT_PIN_OFFSET = [0, -5];
 
 function formatDateTime(value) {
   if (!value) return "-";
@@ -77,9 +71,29 @@ function colorFromId(id) {
   return palette[hash % palette.length];
 }
 
-function createHangoutPin(isDraft = false) {
+function createHangoutPin({
+  isDraft = false,
+  isActive = false,
+  isSwinging = false,
+  swingDelay = "0s",
+  motionPaused = false,
+  isPulsing = false,
+  pulseDelay = "0s",
+} = {}) {
   const el = document.createElement("div");
-  el.className = isDraft ? "hangout-pin hangout-pin--draft" : "hangout-pin";
+  const draftClass = isDraft ? " is-draft" : "";
+  const activeClass = isActive ? " is-active" : "";
+  const swingingClass = isSwinging ? " is-swinging" : "";
+  const pulsingClass = isPulsing ? " is-pulsing" : "";
+  const pausedClass = motionPaused ? " is-motion-paused" : "";
+  el.className = `hangout-pin-simple${draftClass}${activeClass}${swingingClass}${pulsingClass}${pausedClass}`;
+  el.style.setProperty("--swing-delay", swingDelay);
+  el.style.setProperty("--pulse-delay", pulseDelay);
+  if (isPulsing) {
+    const pulse = document.createElement("div");
+    pulse.className = "hangout-pin-pulse";
+    el.appendChild(pulse);
+  }
   const img = document.createElement("img");
   img.src = pinIcon;
   img.alt = "Hangout";
@@ -144,6 +158,7 @@ export default function HangoutsMap() {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [radiusMeters, setRadiusMeters] = useState(DEFAULT_RADIUS_METERS);
   const [zoom, setZoom] = useState(12);
+  const [isMapZooming, setIsMapZooming] = useState(false);
   const [feed, setFeed] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -186,12 +201,15 @@ export default function HangoutsMap() {
   const [formState, setFormState] = useState(() => ({
     title: "",
     description: "",
-    startsAt: toLocalInputValue(new Date()),
+    startsAt: null,
     durationMinutes: 120,
     visibility: "friends",
     maxAttendees: "",
     createGroupChat: true,
   }));
+  const [searchParams] = useSearchParams();
+  const hangoutIdParam = searchParams.get("hangoutId");
+  const handledHangoutIdRef = useRef(null);
 
   const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN || "", []);
 
@@ -336,6 +354,8 @@ export default function HangoutsMap() {
       }
       setMapLoaded(true);
     });
+    map.on("zoomstart", () => setIsMapZooming(true));
+    map.on("zoomend", () => setIsMapZooming(false));
     map.on("click", (e) => {
       const target = e.originalEvent?.target;
       if (target && target.closest(".map-overlay")) return;
@@ -503,25 +523,60 @@ export default function HangoutsMap() {
     if (!mapRef.current || !mapLoaded) return;
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
+    if (showCreate && draftPin) return;
 
     for (const h of feed) {
       const coords = h.location?.coordinates;
       if (!coords || coords.length < 2) continue;
-      const marker = new mapboxgl.Marker({
-        element: createHangoutPin(false),
-        anchor: "bottom",
-      })
-        .setLngLat(coords)
-        .addTo(mapRef.current);
-      marker.getElement().addEventListener("click", (e) => {
-        e.stopPropagation();
-        setSelectedId(h._id);
-        setSelected(h);
-        setDetailPlacement("left");
+      const coordsForRadius = h.location?.coordinates;
+      const distance =
+        coordsForRadius && coordsForRadius.length === 2
+          ? distanceKm(center, { lng: coordsForRadius[0], lat: coordsForRadius[1] })
+          : null;
+      const isInRadius =
+        typeof distance === "number" && distance <= radiusMeters / 1000;
+      const isActive = selectedId === h._id;
+      const swingDelay = `${(markersRef.current.length % 5) * 0.4}s`;
+      const pulseDelay = `${(markersRef.current.length % 6) * 0.35}s`;
+      const markerEl = createHangoutPin({
+        isActive,
+        isSwinging: isInRadius && !isActive,
+        swingDelay,
+        isPulsing: isInRadius && !isActive,
+        pulseDelay,
+        motionPaused: isMapZooming,
       });
-      markersRef.current.push(marker);
+    const marker = new mapboxgl.Marker({
+      element: markerEl,
+      anchor: "bottom",
+      offset: HANGOUT_PIN_OFFSET,
+    })
+      .setLngLat(coords)
+      .addTo(mapRef.current);
+    marker.getElement().addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (selectedId === h._id) {
+        setSelectedId(null);
+        setSelected(null);
+        setDetailPlacement(null);
+        return;
+      }
+      setSelectedId(h._id);
+      setSelected(h);
+      setDetailPlacement("joined");
+    });
+    markersRef.current.push(marker);
     }
-  }, [feed, mapLoaded]);
+  }, [
+    feed,
+    mapLoaded,
+    selectedId,
+    center,
+    radiusMeters,
+    isMapZooming,
+    showCreate,
+    draftPin,
+  ]);
 
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) return;
@@ -536,12 +591,13 @@ export default function HangoutsMap() {
     const marker =
       draftMarkerRef.current ||
       new mapboxgl.Marker({
-        element: createHangoutPin(true),
+        element: createHangoutPin({ isDraft: true }),
         anchor: "bottom",
+        offset: HANGOUT_PIN_OFFSET,
       });
     marker.setLngLat([draftPin.lng, draftPin.lat]).addTo(mapRef.current);
     draftMarkerRef.current = marker;
-  }, [draftPin, mapLoaded]);
+  }, [draftPin, mapLoaded, isMapZooming]);
 
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) return;
@@ -678,6 +734,39 @@ export default function HangoutsMap() {
     loadDetails(selectedId);
   }, [selectedId, accessToken]);
 
+  useEffect(() => {
+    if (!hangoutIdParam) return;
+    if (handledHangoutIdRef.current === hangoutIdParam) return;
+    handledHangoutIdRef.current = hangoutIdParam;
+    const found = feed.find((h) => h._id === hangoutIdParam);
+    if (found) {
+      setSelectedId(found._id);
+      setSelected(found);
+      setDetailPlacement("joined");
+      const coords = found.location?.coordinates;
+      if (mapRef.current && mapLoaded && coords?.length === 2) {
+        mapRef.current.flyTo({
+          center: coords,
+          zoom: 14,
+          essential: true,
+        });
+      }
+      return;
+    }
+    if (accessToken) {
+      setSelectedId(hangoutIdParam);
+      setDetailPlacement("joined");
+      loadDetails(hangoutIdParam);
+    }
+  }, [hangoutIdParam, feed, mapLoaded, accessToken]);
+
+  useEffect(() => {
+    if (!hangoutIdParam || !selected || selected._id !== hangoutIdParam) return;
+    const coords = selected.location?.coordinates;
+    if (!mapRef.current || !mapLoaded || !coords || coords.length < 2) return;
+    mapRef.current.flyTo({ center: coords, zoom: 14, essential: true });
+  }, [hangoutIdParam, selected, mapLoaded]);
+
   function distanceKm(a, b) {
     if (!a || !b) return null;
     const toRad = (n) => (n * Math.PI) / 180;
@@ -701,9 +790,13 @@ export default function HangoutsMap() {
     !isJoined;
   const joinedHangouts = useMemo(
     () =>
-      feed.filter((h) =>
-        (h.attendees || []).some((a) => String(a.id) === String(user?.id))
-      ),
+      feed.filter((h) => {
+        const isAttendee = (h.attendees || []).some(
+          (a) => String(a.id) === String(user?.id)
+        );
+        const isCreator = String(h.creator?.id || "") === String(user?.id || "");
+        return isAttendee && !isCreator;
+      }),
     [feed, user?.id]
   );
   const myHangouts = useMemo(
@@ -992,9 +1085,11 @@ export default function HangoutsMap() {
       return;
     }
 
-    const startsAt = formState.startsAt
-      ? new Date(formState.startsAt).toISOString()
-      : null;
+    if (!formState.startsAt) {
+      setFormError("Start time is required.");
+      return;
+    }
+    const startsAt = formState.startsAt.toISOString();
 
     const payload = {
       title: formState.title.trim(),
@@ -1023,7 +1118,7 @@ export default function HangoutsMap() {
       setFormState({
         title: "",
         description: "",
-        startsAt: toLocalInputValue(new Date()),
+        startsAt: null,
         durationMinutes: 120,
         visibility: "friends",
         maxAttendees: "",
@@ -1239,7 +1334,7 @@ export default function HangoutsMap() {
     setFormState({
       title: "",
       description: "",
-      startsAt: toLocalInputValue(new Date()),
+      startsAt: null,
       durationMinutes: 120,
       visibility: "friends",
       maxAttendees: "",
@@ -1257,13 +1352,16 @@ export default function HangoutsMap() {
     setFormState({
       title: selected.title || "",
       description: selected.description || "",
-      startsAt: toLocalInputValue(new Date(selected.startsAt)),
+      startsAt: selected.startsAt ? dayjs(selected.startsAt) : null,
       durationMinutes: Math.max(
         15,
-        Math.round(
-          (new Date(selected.endsAt).getTime() - new Date(selected.startsAt).getTime()) /
-            60000
-        )
+        selected.endsAt && selected.startsAt
+          ? Math.round(
+              (new Date(selected.endsAt).getTime() -
+                new Date(selected.startsAt).getTime()) /
+                60000
+            )
+          : 120
       ),
       visibility: selected.visibility || "friends",
       maxAttendees: selected.maxAttendees ?? "",
@@ -1303,7 +1401,7 @@ export default function HangoutsMap() {
     setDetailPlacement(null);
   }
 
-  function renderHangoutList(items, emptyCopy, onSelect) {
+  function renderHangoutList(items, emptyCopy, placement) {
     if (isLoading) {
       return <div className="hangouts-panel-muted">Loading hangouts...</div>;
     }
@@ -1320,7 +1418,20 @@ export default function HangoutsMap() {
             onClick={() => {
               setSelectedId(h._id);
               setSelected(h);
-              if (onSelect) onSelect(h);
+              if (placement) setDetailPlacement(placement);
+              const coords = h.location?.coordinates;
+              if (
+                mapRef.current &&
+                mapLoaded &&
+                coords &&
+                coords.length === 2
+              ) {
+                mapRef.current.flyTo({
+                  center: coords,
+                  zoom: 14,
+                  essential: true,
+                });
+              }
             }}
           >
             <div className="hangout-list-avatar">
@@ -1455,10 +1566,15 @@ export default function HangoutsMap() {
                       </button>
                       <button
                         type="button"
-                        className="btn btn-sm btn-outline-secondary"
+                        className="map-toggle-icon-btn"
                         onClick={() => setShowJoinedList((prev) => !prev)}
+                        aria-label={showJoinedList ? "Hide list" : "Show list"}
+                        title={showJoinedList ? "Hide" : "Show"}
                       >
-                        {showJoinedList ? "Hide" : "Show"}
+                        <img
+                          src={showJoinedList ? hiddenIcon : showIcon}
+                          alt=""
+                        />
                       </button>
                     </div>
                   </div>
@@ -1509,93 +1625,60 @@ export default function HangoutsMap() {
                           showMyHangouts
                             ? "You have not created any hangouts yet."
                             : "You have not joined any hangouts yet.",
-                          () => setDetailPlacement("joined")
+                          "joined"
                         )}
                       </div>
                     )
                   )}
                 </div>
+                <div className="map-actions-right">
+                  <MapActions onRecenter={handleRecenter} disabled={!userLocation} />
+                </div>
               </div>
-            )}
-
-            {mapReady && locationEnabled !== false && (
-              <div className="map-hint">
-                Click on the map to drop a new hangout pin.
-              </div>
-            )}
-
-            {mapReady && locationEnabled !== false && (
-              <MapSearch
-                searchRef={searchRef}
-                searchQuery={searchQuery}
-                onChangeSearchQuery={(e) => setSearchQuery(e.target.value)}
-                onSubmitSearch={handleSearch}
-                searchError={searchError}
-                searchResults={searchResults}
-                onSelectResult={handleSelectResult}
-              />
             )}
 
             {mapReady && locationEnabled !== false && (
               <div className="map-left-stack map-overlay">
-                <div className="map-within-panel">
-                  <div className="map-within-header">
-                    <div className="map-within-meta">
-                      <div className="fw-semibold small">Within radius</div>
-                      <div className="text-muted small">
-                        {Math.round(radiusMeters / 1000)} km around you
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      onClick={() => setShowWithinList((prev) => !prev)}
-                    >
-                      {showWithinList ? "Hide" : "Show"}
-                    </button>
-                  </div>
-                  {showWithinList && (
-                    <div className="map-within-body">
-                      {renderHangoutList(
-                        feed,
-                        "No hangouts within this radius yet.",
-                        () => setDetailPlacement("left")
-                      )}
-                    </div>
-                  )}
-                </div>
-                <MapActions onRecenter={handleRecenter} disabled={!userLocation} />
-                {detailPlacement === "left" && selected && (
-                  <HangoutDetailCard
-                    selected={selected}
-                    userLocation={userLocation}
-                    isCreator={isCreator}
-                    isJoined={isJoined}
-                    isFull={isFull}
-                    isDetailLoading={isDetailLoading}
-                    shareEnabled={shareEnabled}
-                    shareError={shareError}
-                    shareLoading={shareLoading}
-                    shareNote={shareNote}
-                    shareNoteError={shareNoteError}
-                    driveDistanceLoading={driveDistanceLoading}
-                    driveDistanceKm={driveDistanceKm}
-                    driveDistanceError={driveDistanceError}
-                    routeLoading={routeLoading}
-                    routeVisible={routeVisible}
-                    routeError={routeError}
-                    formatDateTime={formatDateTime}
-                    resolveAvatar={resolveAvatar}
-                    distanceKm={distanceKm}
-                    onClose={handleCloseDetail}
-                    onJoinLeave={handleJoinLeave}
-                    onDelete={handleDelete}
-                    onEdit={openEdit}
-                    onToggleShareLocation={handleToggleShareLocation}
-                    onToggleRoute={handleToggleRoute}
-                    onShareNoteChange={(e) => setShareNote(e.target.value)}
+                <div className="map-left-primary">
+                  <div className="map-hint">Click on the map to drop a new hangout pin.</div>
+                  <MapSearch
+                    searchRef={searchRef}
+                    searchQuery={searchQuery}
+                    onChangeSearchQuery={(e) => setSearchQuery(e.target.value)}
+                    onSubmitSearch={handleSearch}
+                    searchError={searchError}
+                    searchResults={searchResults}
+                    onSelectResult={handleSelectResult}
                   />
-                )}
+                  <div className="map-within-panel">
+                    <div className="map-within-header">
+                      <div className="map-within-meta">
+                        <div className="fw-semibold small">Within radius</div>
+                        <div className="text-muted small">
+                          {Math.round(radiusMeters / 1000)} km around you
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="map-toggle-icon-btn"
+                        onClick={() => setShowWithinList((prev) => !prev)}
+                        aria-label={showWithinList ? "Hide list" : "Show list"}
+                        title={showWithinList ? "Hide" : "Show"}
+                      >
+                        <img src={showWithinList ? hiddenIcon : showIcon} alt="" />
+                      </button>
+                    </div>
+                    {showWithinList && (
+                      <div className="map-within-body">
+                        {renderHangoutList(
+                          feed,
+                          "No hangouts within this radius yet.",
+                          "joined"
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 

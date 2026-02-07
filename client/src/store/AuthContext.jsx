@@ -71,6 +71,9 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!user?.id) return;
+    if (!socket.connected) {
+      socket.connect();
+    }
     socket.emit("auth:online", user.id);
   }, [user]);
 
@@ -132,8 +135,14 @@ export function AuthProvider({ children }) {
     await refreshChatSettings();
   }
 
-  async function register(username, email, password, gender) {
-    const r = await authApi.register({ username, email, password, gender });
+  async function register(displayName, username, email, password, gender) {
+    const r = await authApi.register({
+      displayName,
+      username,
+      email,
+      password,
+      gender,
+    });
     setAccessToken(r.accessToken);
     setUser(r.user);
     await refreshChatSettings();
@@ -141,6 +150,10 @@ export function AuthProvider({ children }) {
 
   async function logout() {
     try {
+      if (user?.id) {
+        socket.emit("auth:offline", user.id);
+      }
+      socket.disconnect();
       await authApi.logout();
     } finally {
       setUser(null);

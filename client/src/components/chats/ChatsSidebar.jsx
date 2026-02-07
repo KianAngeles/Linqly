@@ -28,7 +28,6 @@ export default function ChatsSidebar({
   muteOptions,
   onSetMuteDuration,
   onClearMute,
-  onToggleIgnore,
   onDeleteChat,
   formatTime,
 }) {
@@ -263,17 +262,22 @@ export default function ChatsSidebar({
                   style={{ textDecoration: "none", color: "inherit" }}
                 >
                   <div className="d-flex align-items-center gap-2">
-                    {avatarSrc ? (
-                      <img
-                        src={avatarSrc}
-                        alt={c.displayName || "Avatar"}
-                        className="chat-list-avatar"
-                      />
-                    ) : (
-                      <div className="chat-list-avatar chat-list-avatar-fallback">
-                        {getInitial(c.displayName || c.type)}
-                      </div>
-                    )}
+                    <div className="chat-list-avatar-wrap">
+                      {avatarSrc ? (
+                        <img
+                          src={avatarSrc}
+                          alt={c.displayName || "Avatar"}
+                          className="chat-list-avatar"
+                        />
+                      ) : (
+                        <div className="chat-list-avatar chat-list-avatar-fallback">
+                          {getInitial(c.displayName || c.type)}
+                        </div>
+                      )}
+                      {c.type === "direct" && c.otherUser?.isOnline && (
+                        <span className="chat-list-online-dot" />
+                      )}
+                    </div>
                     <div>
                       <div className="chat-list-title d-flex align-items-center gap-2">
                         <span>{c.displayName || c.type}</span>
@@ -296,7 +300,6 @@ export default function ChatsSidebar({
                             style={{ opacity: 0.8 }}
                           />
                         ) : null}
-                        {c.settings?.isIgnored ? <span>[IGNORE]</span> : null}
                     </div>
                       <div className="chat-list-preview opacity-75">
                         <span>{previewShort}</span>
@@ -379,14 +382,6 @@ export default function ChatsSidebar({
                             }}
                           >
                             {c.settings?.isMuted ? "Unmute" : "Mute"}
-                          </button>
-                        </li>
-                        <li>
-                          <button
-                            className="dropdown-item"
-                            onClick={() => onToggleIgnore(c)}
-                          >
-                            {c.settings?.isIgnored ? "Unignore" : "Ignore"}
                           </button>
                         </li>
                         <li>

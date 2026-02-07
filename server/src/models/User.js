@@ -6,9 +6,43 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      unique: true,
       minlength: 3,
       maxlength: 30,
+    },
+    usernameLower: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      sparse: true,
+    },
+    displayName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    bio: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 180,
+    },
+    location: {
+      country: { type: String, trim: true, default: "" },
+      province: { type: String, trim: true, default: "" },
+    },
+    birthday: {
+      type: Date,
+      default: null,
+    },
+    interests: {
+      type: [String],
+      default: [],
+    },
+    about: {
+      type: String,
+      trim: true,
+      default: "",
     },
 
     email: {
@@ -54,11 +88,64 @@ const userSchema = new mongoose.Schema(
       enum: ["man", "girl"],
       default: null,
     },
+    gender: {
+      type: String,
+      enum: ["male", "female", "other", ""],
+      default: "",
+    },
 
     status: {
       type: String,
       enum: ["online", "offline", "busy"],
       default: "offline",
+    },
+
+    privacy: {
+      gender: {
+        type: String,
+        enum: ["Public", "Friends", "Only me"],
+        default: "Public",
+      },
+      birthday: {
+        type: String,
+        enum: ["Public", "Friends", "Only me"],
+        default: "Friends",
+      },
+      location: {
+        type: String,
+        enum: ["Public", "Friends", "Only me"],
+        default: "Friends",
+      },
+      interests: {
+        type: String,
+        enum: ["Public", "Friends", "Only me"],
+        default: "Public",
+      },
+      bio: {
+        type: String,
+        enum: ["Public", "Friends", "Only me"],
+        default: "Public",
+      },
+      about: {
+        type: String,
+        enum: ["Public", "Friends", "Only me"],
+        default: "Public",
+      },
+      friends: {
+        type: String,
+        enum: ["Public", "Friends", "Only me"],
+        default: "Friends",
+      },
+      hangoutsCreated: {
+        type: String,
+        enum: ["Public", "Friends", "Only me"],
+        default: "Friends",
+      },
+      hangoutsJoined: {
+        type: String,
+        enum: ["Public", "Friends", "Only me"],
+        default: "Only me",
+      },
     },
   },
   {

@@ -266,10 +266,6 @@ export default function useGroupManagement({
 
   const handleLeaveGroup = useCallback(
     async () => {
-      const label = isHangoutChat
-        ? "Leave this hangout chat?"
-        : "Leave this group chat?";
-      if (!confirm(label)) return;
       setErr("");
       try {
         await chatsApi.leaveGroup(accessToken, selectedChatId);

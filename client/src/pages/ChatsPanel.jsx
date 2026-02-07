@@ -87,6 +87,8 @@ export default function ChatsPanel() {
   const [memberMenuOpenFor, setMemberMenuOpenFor] = useState(null);
   const memberMenuRef = useRef(null);
   const [reactionModal, setReactionModal] = useState(null);
+  const [unsendModal, setUnsendModal] = useState(null);
+  const [leaveGroupModalOpen, setLeaveGroupModalOpen] = useState(false);
   const [mediaViewer, setMediaViewer] = useState(null);
   const [nicknameDraft, setNicknameDraft] = useState("");
   const [showFindMessage, setShowFindMessage] = useState(false);
@@ -158,7 +160,7 @@ export default function ChatsPanel() {
 
   const chatRoomRef = useRef(null);
 
-  const { chats, setChats, loadChats, togglePin, toggleIgnore, deleteChat } =
+  const { chats, setChats, loadChats, togglePin, deleteChat } =
     useChatsData({
       accessToken,
       routeChatId,
@@ -408,6 +410,26 @@ export default function ChatsPanel() {
       socket.off("typing:stop", onTypingStop);
     };
   }, [selectedChatId, user?.id]);
+
+  useEffect(() => {
+    const handlePresence = ({ userId, isOnline }) => {
+      if (!userId) return;
+      setChats((prev) =>
+        prev.map((c) => {
+          if (c.type !== "direct" || !c.otherUser) return c;
+          if (String(c.otherUser.id) !== String(userId)) return c;
+          return {
+            ...c,
+            otherUser: { ...c.otherUser, isOnline: !!isOnline },
+          };
+        })
+      );
+    };
+    socket.on("presence:update", handlePresence);
+    return () => {
+      socket.off("presence:update", handlePresence);
+    };
+  }, [setChats]);
 
 
   const settingsActions = selectedChatId ? (
@@ -673,16 +695,12 @@ export default function ChatsPanel() {
                     x
                   </button>
                 </div>
-                <GroupAddMembersPanel
-                  friends={friends}
-                  onAddMember={addMemberToGroup}
-                  existingMemberIds={
-                    new Set(
-                      (groupSettings.members || []).map((m) => String(m.id))
-                    )
-                  }
-                  API_BASE={API_BASE}
-                />
+                  <GroupAddMembersPanel
+                    friends={friends}
+                    onAddMember={addMemberToGroup}
+                    existingMembers={groupSettings.members || []}
+                    API_BASE={API_BASE}
+                  />
               </div>
             </div>
           )}
@@ -1212,6 +1230,8 @@ export default function ChatsPanel() {
     setShowAddMembers(false);
     setShowGroupNameModal(false);
     setShowNicknamesModal(false);
+    setUnsendModal(null);
+    setLeaveGroupModalOpen(false);
     setMediaViewer(null);
     setEditingUserId(null);
     setNicknameDraft("");
@@ -1358,14 +1378,41 @@ export default function ChatsPanel() {
     }
   }
 
-  async function unsendMessage(messageId) {
-    if (!confirm("Unsend this message?")) return;
+  function getUnsendPreview(message) {
+    if (!message) return "this message";
+    const rawText = String(message.text || "").trim();
+    if (rawText) {
+      return rawText.length > 120 ? `${rawText.slice(0, 117)}...` : rawText;
+    }
+    if (message.type === "image" || message.imageUrl) return "image";
+    if (message.type === "video") return "video message";
+    if (message.type === "audio") return "audio message";
+    if (message.type === "file") {
+      return message.fileName ? `file "${message.fileName}"` : "file";
+    }
+    return "this message";
+  }
+
+  function openUnsendModal(message) {
+    const messageId = message?.id || message?._id;
+    if (!messageId) return;
+    setUnsendModal({
+      messageId,
+      preview: getUnsendPreview(message),
+    });
+    setMoreOpenFor(null);
+  }
+
+  async function confirmUnsendMessage() {
+    if (!unsendModal?.messageId) return;
     setErr("");
     try {
-      await messagesApi.delete(accessToken, messageId);
+      await messagesApi.delete(accessToken, unsendModal.messageId);
       setMoreOpenFor(null);
     } catch (e) {
       setErr(e.message);
+    } finally {
+      setUnsendModal(null);
     }
   }
 
@@ -1456,7 +1503,12 @@ export default function ChatsPanel() {
   }
 
   async function handleLeaveGroup() {
+    setLeaveGroupModalOpen(true);
+  }
+
+  async function confirmLeaveGroup() {
     const didLeave = await leaveGroup();
+    setLeaveGroupModalOpen(false);
     if (didLeave) setMessages([]);
   }
 
@@ -1729,6 +1781,81 @@ export default function ChatsPanel() {
       </div>
     );
   })() : null;
+  const unsendModalView = unsendModal ? (
+    <div
+      className="chat-modal-overlay"
+      onClick={() => setUnsendModal(null)}
+    >
+      <div className="chat-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="chat-modal-header">
+          <div className="fw-semibold">Unsend message</div>
+          <button
+            type="button"
+            className="chat-modal-close"
+            onClick={() => setUnsendModal(null)}
+          >
+            x
+          </button>
+        </div>
+        <div className="mb-3">
+          Are you sure you want to unsend the message:{" "}
+          <span className="fw-semibold">{unsendModal.preview}</span>?
+        </div>
+        <div className="d-flex justify-content-end gap-2">
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => setUnsendModal(null)}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm btn-danger"
+            onClick={confirmUnsendMessage}
+          >
+            Unsend
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+  const leaveGroupModalView = leaveGroupModalOpen ? (
+    <div
+      className="chat-modal-overlay"
+      onClick={() => setLeaveGroupModalOpen(false)}
+    >
+      <div className="chat-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="chat-modal-header">
+          <div className="fw-semibold">Leave chat</div>
+          <button
+            type="button"
+            className="chat-modal-close"
+            onClick={() => setLeaveGroupModalOpen(false)}
+          >
+            x
+          </button>
+        </div>
+        <div className="mb-3">Are you sure you want to leave?</div>
+        <div className="d-flex justify-content-end gap-2">
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => setLeaveGroupModalOpen(false)}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm btn-danger"
+            onClick={confirmLeaveGroup}
+          >
+            Leave
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   function renderSeenAvatar(member, size, title) {
     const avatarUrl = resolveAvatarUrl(member?.avatarUrl || "");
@@ -1763,6 +1890,7 @@ export default function ChatsPanel() {
     directPeer.avatarUrl.startsWith("https://")
       ? directPeer.avatarUrl
       : `${API_BASE}${directPeer.avatarUrl}`);
+  const directPeerOnline = Boolean(selectedChat?.otherUser?.isOnline);
   const groupAvatar = selectedChat?.avatarUrl
     ? selectedChat.avatarUrl.startsWith("http://") ||
       selectedChat.avatarUrl.startsWith("https://")
@@ -1958,8 +2086,11 @@ export default function ChatsPanel() {
     let seenIndicator = null;
     if (readReceiptsEnabled && !isDeletedMessage) {
       const readersForMessage = seenReadersByMessage.get(String(messageId)) || [];
-      if (readersForMessage.length > 0) {
-        const members = readersForMessage.map((r) => {
+      const eligibleReaders = isGroupChat
+        ? readersForMessage.filter((r) => memberDirectory.has(String(r.userId)))
+        : readersForMessage;
+      if (eligibleReaders.length > 0) {
+        const members = eligibleReaders.map((r) => {
           const member = memberDirectory.get(String(r.userId));
           return (
             member || {
@@ -2041,7 +2172,7 @@ export default function ChatsPanel() {
           onReplyToggle={onReplyToggle}
           onReactToggle={onReactToggle}
           onMoreToggle={onMoreToggle}
-          onUnsend={() => unsendMessage(messageId)}
+          onUnsend={() => openUnsendModal(m)}
           onDeleteForMe={() => deleteForMe(messageId)}
           showPicker={showPicker}
           showMoreMenu={showMoreMenu}
@@ -2106,7 +2237,6 @@ export default function ChatsPanel() {
           muteOptions={muteDurationOptions}
           onSetMuteDuration={(chat, ms) => setChatMute(chat._id, ms)}
           onClearMute={(chat) => setChatMute(chat._id, null)}
-          onToggleIgnore={toggleIgnore}
           onDeleteChat={handleDeleteChat}
           formatTime={formatRelativeTime}
         />
@@ -2272,6 +2402,9 @@ export default function ChatsPanel() {
                       {directPeerName.trim().charAt(0).toUpperCase()}
                     </div>
                   )}
+                  {directPeerOnline && (
+                    <span className="chat-settings-online-dot" />
+                  )}
                 </div>
                 <div className="chat-settings-name">{directPeerName}</div>
                 {settingsActions}
@@ -2318,8 +2451,10 @@ export default function ChatsPanel() {
           )}
           {nicknamesModal}
       {groupNameModal}
-      {reactionModalView}
-      {removeMemberModal}
+        {reactionModalView}
+        {unsendModalView}
+        {leaveGroupModalView}
+        {removeMemberModal}
       {cropPhotoModal}
       {editEmojiModal}
       {mediaViewer?.url && (

@@ -42,6 +42,16 @@ function emitToUser(userId, event, payload) {
   });
 }
 
+async function emitPresenceUpdate(userId, isOnline) {
+  if (!userId) return;
+  try {
+    const uid = String(userId);
+    io.emit("presence:update", { userId: uid, isOnline: !!isOnline });
+  } catch (err) {
+    console.error("Presence update failed:", err);
+  }
+}
+
 function isUserBusy(userId) {
   return userCallIndex.has(String(userId));
 }
@@ -86,15 +96,38 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("auth:online", (userId) => {
+  socket.on("auth:online", async (userId) => {
     if (!userId) return;
     const uid = String(userId);
     socket.data.userId = uid;
     if (!onlineUsers.has(uid)) {
       onlineUsers.set(uid, new Set());
     }
-    onlineUsers.get(uid).add(socket.id);
-    console.log("User online:", userId);
+    const set = onlineUsers.get(uid);
+    const wasOnline = set.size > 0;
+    set.add(socket.id);
+    if (!wasOnline) {
+      console.log("User online:", userId);
+      await emitPresenceUpdate(uid, true);
+    }
+  });
+
+  socket.on("auth:offline", async (userId) => {
+    const uid = String(userId || socket.data.userId || "");
+    if (!uid) return;
+    const set = onlineUsers.get(uid);
+    let wentOffline = false;
+    if (set) {
+      set.delete(socket.id);
+      if (set.size === 0) {
+        onlineUsers.delete(uid);
+        wentOffline = true;
+      }
+    }
+    if (wentOffline) {
+      console.log("User offline:", uid);
+      await emitPresenceUpdate(uid, false);
+    }
   });
 
   socket.on("chat:join", ({ chatId }) => {
@@ -304,9 +337,13 @@ io.on("connection", (socket) => {
         }
       }
       const set = onlineUsers.get(uid);
+      let wentOffline = false;
       if (set) {
         set.delete(socket.id);
-        if (set.size === 0) onlineUsers.delete(uid);
+        if (set.size === 0) {
+          onlineUsers.delete(uid);
+          wentOffline = true;
+        }
       }
 
       if (getSharedLocation(uid)) {
@@ -326,7 +363,10 @@ io.on("connection", (socket) => {
           console.error("Failed to clear shared location on disconnect:", err);
         }
       }
-      console.log("User offline:", socket.data.userId);
+      if (wentOffline) {
+        console.log("User offline:", socket.data.userId);
+        await emitPresenceUpdate(uid, false);
+      }
     }
     console.log("Socket disconnected:", socket.id);
   });

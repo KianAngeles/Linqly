@@ -1,6 +1,15 @@
 const API = import.meta.env.VITE_API_URL;
 
 export const hangoutsApi = {
+  async mine(accessToken) {
+    const r = await fetch(`${API}/hangouts/mine`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "include",
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || "Failed to load hangouts");
+    return data;
+  },
   async feed(accessToken, { lng, lat, radius }) {
     const url = new URL(`${API}/hangouts/feed`);
     url.searchParams.set("lng", lng);

@@ -1,12 +1,6 @@
 import { NavLink } from "react-router-dom";
-
-const navItems = [
-  { label: "Home", to: "/app" },
-  { label: "Messenger", to: "/app/chats", badge: "unread" },
-  { label: "Map", to: "/app/map" },
-  { label: "Friends", to: "/app/friends" },
-  { label: "Settings", to: "/app/settings" },
-];
+import { useMemo } from "react";
+import { useAuth } from "../../store/AuthContext";
 
 function Badge({ variant }) {
   if (variant === "unread") {
@@ -20,6 +14,20 @@ function Badge({ variant }) {
 }
 
 export default function Sidebar() {
+  const { user } = useAuth();
+  const navItems = useMemo(() => {
+    const usernameRaw = user?.username ? String(user.username) : "";
+    const username = usernameRaw.replace(/^@+/, "");
+    return [
+      { label: "Home", to: "/app" },
+      { label: "Messenger", to: "/app/chats", badge: "unread" },
+      { label: "Map", to: "/app/map" },
+      { label: "Friends", to: "/app/friends" },
+      { label: "Profile", to: username ? `/app/profile/${username}` : "/app/profile" },
+      { label: "Settings", to: "/app/settings" },
+    ];
+  }, [user?.username]);
+
   return (
     <aside className="app-sidebar">
       <div className="px-3 py-4">

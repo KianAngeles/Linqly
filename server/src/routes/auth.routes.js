@@ -10,6 +10,8 @@ const { authRequired } = require("../middleware/authRequired");
 const { validatePassword } = require("../utils/passwordRules");
 const { sendPasswordResetEmail } = require("../utils/mailer");
 const { resolveAvatar } = require("../utils/avatar");
+const { normalizeUsername, isUsernameValid } = require("../utils/username");
+const { normalizeLocationInput } = require("../utils/location");
 
 const rateLimit = require("express-rate-limit"); 
 const router = express.Router();
@@ -41,12 +43,19 @@ const forgotLimiter = rateLimit({
 
 // POST /auth/register
 router.post("/register", async (req, res) => {
-  const { username, email, password, gender } = req.body;
+  const { username, email, password, gender, displayName } = req.body;
 
-  if (!username || !email || !password)
+  if (!displayName || !username || !email || !password)
     return res
       .status(400)
-      .json({ message: "username, email, password required" });
+      .json({ message: "displayName, username, email, password required" });
+
+  const normalized = normalizeUsername(username);
+  if (!isUsernameValid(normalized)) {
+    return res.status(400).json({
+      message: "Username must be 3-30 characters and contain only letters, numbers, or underscore.",
+    });
+  }
 
   if (!validatePassword(password)) {
     return res.status(400).json({
@@ -56,7 +65,12 @@ router.post("/register", async (req, res) => {
   }
 
   const exists = await User.findOne({
-    $or: [{ email: email.toLowerCase() }, { username }],
+    $or: [
+      { email: email.toLowerCase() },
+      { usernameLower: normalized },
+      { username: normalized },
+      { username: `@${normalized}` },
+    ],
   });
   if (exists) return res.status(409).json({ message: "User already exists" });
 
@@ -64,10 +78,13 @@ router.post("/register", async (req, res) => {
   const avatarChoice =
     gender === "female" ? "girl" : gender === "male" ? "man" : null;
   const user = await User.create({
-    username,
+    username: normalized,
+    usernameLower: normalized,
+    displayName: String(displayName || "").trim(),
     email,
     passwordHash,
     avatarChoice,
+    gender: typeof gender === "string" ? gender.toLowerCase() : "",
   });
 
   const accessToken = signAccessToken({ userId: user._id.toString() });
@@ -81,9 +98,17 @@ router.post("/register", async (req, res) => {
     user: {
       id: user._id,
       username: user.username,
+      displayName: user.displayName || user.username,
       email: user.email,
       avatarUrl: resolveAvatar(user),
       avatarChoice: user.avatarChoice || null,
+      gender: user.gender || "",
+      bio: user.bio || "",
+      location: normalizeLocationInput(user.location),
+      birthday: user.birthday || null,
+      interests: user.interests || [],
+      about: user.about || "",
+      privacy: user.privacy || {},
     },
     accessToken,
   });
@@ -101,6 +126,16 @@ router.post("/login", async (req, res) => {
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
+  if (!user.usernameLower && user.username) {
+    const normalized = normalizeUsername(user.username);
+    if (normalized) {
+      user.usernameLower = normalized;
+    }
+  }
+  if (!user.displayName && user.username) {
+    user.displayName = user.username;
+  }
+
   const accessToken = signAccessToken({ userId: user._id.toString() });
   const refreshToken = signRefreshToken({ userId: user._id.toString() });
 
@@ -112,9 +147,18 @@ router.post("/login", async (req, res) => {
     user: {
       id: user._id,
       username: user.username,
+      displayName: user.displayName || user.username,
       email: user.email,
       avatarUrl: resolveAvatar(user),
       avatarChoice: user.avatarChoice || null,
+      gender: user.gender || "",
+      bio: user.bio || "",
+      location: normalizeLocationInput(user.location),
+      birthday: user.birthday || null,
+      interests: user.interests || [],
+      about: user.about || "",
+      createdAt: user.createdAt,
+      privacy: user.privacy || {},
     },
     accessToken,
   });
@@ -157,16 +201,25 @@ router.post("/logout", async (req, res) => {
 // GET /auth/me (requires access token)
 router.get("/me", authRequired, async (req, res) => {
   const user = await User.findById(req.user.userId).select(
-    "_id username email avatarUrl avatarChoice"
+    "_id username displayName email avatarUrl avatarChoice gender bio location birthday interests about createdAt"
   );
   if (!user) return res.status(404).json({ message: "User not found" });
   return res.json({
     user: {
       id: user._id,
       username: user.username,
+      displayName: user.displayName || user.username,
       email: user.email,
       avatarUrl: resolveAvatar(user),
       avatarChoice: user.avatarChoice || null,
+      gender: user.gender || "",
+      bio: user.bio || "",
+      location: normalizeLocationInput(user.location),
+      birthday: user.birthday || null,
+      interests: user.interests || [],
+      about: user.about || "",
+      createdAt: user.createdAt,
+      privacy: user.privacy || {},
     },
   });
 });

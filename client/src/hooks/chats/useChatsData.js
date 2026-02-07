@@ -46,16 +46,6 @@ export default function useChatsData({
     [accessToken, loadChats]
   );
 
-  const toggleIgnore = useCallback(
-    async (c) => {
-      await chatsApi.updateSettings(accessToken, c._id, {
-        isIgnored: !c.settings?.isIgnored,
-      });
-      await loadChats();
-    },
-    [accessToken, loadChats]
-  );
-
   const deleteChat = useCallback(
     async (c) => {
       if (!confirm("Delete this chat for you?")) return;
@@ -76,7 +66,6 @@ export default function useChatsData({
     setChats,
     loadChats,
     togglePin,
-    toggleIgnore,
     deleteChat,
   };
 }

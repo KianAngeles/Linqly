@@ -157,6 +157,19 @@ router.post("/", authRequired, async (req, res) => {
   res.status(201).json({ hangout: toHangoutSummary(doc) });
 });
 
+// GET /hangouts/mine
+router.get("/mine", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const docs = await Hangout.find({
+    $or: [{ creatorId: me }, { attendeeIds: me }],
+  })
+    .sort({ startsAt: -1 })
+    .populate("creatorId", "username avatarUrl")
+    .populate("attendeeIds", "username avatarUrl");
+
+  return res.json({ hangouts: docs.map((doc) => toHangoutSummary(doc)) });
+});
+
 // GET /hangouts/feed?lng=&lat=&radius=
 router.get("/feed", authRequired, async (req, res) => {
   const me = req.user.userId;

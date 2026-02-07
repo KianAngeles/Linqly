@@ -1,4 +1,8 @@
 // src/components/hangouts/HangoutModal.jsx
+import { LocalizationProvider } from "@mui/x-date-pickers";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
+
 export default function HangoutModal({
   show,
   isEditing,
@@ -46,26 +50,42 @@ export default function HangoutModal({
                   />
                 </div>
                 <div className="row g-2 mb-2">
-                  <div className="col-12 col-md-6">
+                  <div className="col-12 col-md-7">
                     <label className="form-label">Starts At</label>
-                    <input
-                      type="datetime-local"
-                      className="form-control"
-                      value={formState.startsAt}
-                      onChange={(e) => onChangeField("startsAt", e.target.value)}
-                    />
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      <DateTimePicker
+                        value={formState.startsAt || null}
+                        onChange={(newValue) => onChangeField("startsAt", newValue)}
+                        ampm
+                        minutesStep={5}
+                        disablePast={!isEditing}
+                        format="MM/DD/YYYY hh:mm A"
+                        enableAccessibleFieldDOMStructure={false}
+                        slotProps={{
+                          textField: {
+                            fullWidth: true,
+                            size: "small",
+                          },
+                          field: { clearable: true },
+                          actionBar: { actions: ["clear", "accept"] },
+                          popper: { placement: "bottom-start" },
+                        }}
+                      />
+                    </LocalizationProvider>
                   </div>
-                  <div className="col-12 col-md-6">
+                  <div className="col-12 col-md-5">
                     <label className="form-label">Duration (minutes)</label>
                     <input
                       type="number"
                       min="15"
                       max="720"
+                      step="5"
                       className="form-control"
                       value={formState.durationMinutes}
                       onChange={(e) =>
                         onChangeField("durationMinutes", e.target.value)
                       }
+                      required
                     />
                   </div>
                 </div>

@@ -32,8 +32,14 @@ export async function login(email, password) {
   return r;
 }
 
-export async function register(username, email, password) {
-  const r = await authApi.register({ username, email, password });
+export async function register(displayName, username, email, password, gender) {
+  const r = await authApi.register({
+    displayName,
+    username,
+    email,
+    password,
+    gender,
+  });
   accessToken = r.accessToken;
   user = r.user;
   return r;

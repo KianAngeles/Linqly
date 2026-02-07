@@ -1,8 +1,17 @@
 import { apiFetch, API_BASE } from "./http";
 
 export const usersApi = {
-  search: (accessToken, query) =>
-    apiFetch(`/users/search?query=${encodeURIComponent(query)}`, {
+  checkUsername: (username) =>
+    apiFetch(`/users/check-username?username=${encodeURIComponent(username)}`),
+  search: (accessToken, query, page = 1, limit = 8) =>
+    apiFetch(
+      `/users/search?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
+      {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    ),
+  getByUsername: (accessToken, username) =>
+    apiFetch(`/users/by-username/${encodeURIComponent(username)}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     }),
 
@@ -11,6 +20,16 @@ export const usersApi = {
       method: "PATCH",
       headers: { Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify(patch),
+    }),
+  getPrivacy: (accessToken) =>
+    apiFetch("/users/me/privacy", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }),
+  updatePrivacy: (accessToken, privacy) =>
+    apiFetch("/users/me/privacy", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(privacy),
     }),
 
   uploadAvatar: async (accessToken, file) => {
