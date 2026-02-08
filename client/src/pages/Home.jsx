@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../store/AuthContext";
 import { chatsApi } from "../api/chats.api";
 import { hangoutsApi } from "../api/hangouts.api";
 import { friendsApi } from "../api/friends.api";
 import { socket } from "../socket";
+import NotificationsList from "../components/notifications/NotificationsList";
+import { useNotificationsDropdownData } from "../hooks/useNotificationsDropdownData";
 import "./Home.css";
 import friendsIcon from "../assets/icons/sidebar-icons/friends.png";
 import mapIcon from "../assets/icons/sidebar-icons/map.png";
@@ -12,6 +14,7 @@ import messengerIcon from "../assets/icons/sidebar-icons/messenger.png";
 
 
 export default function Home() {
+  const nav = useNavigate();
   const { user, accessToken } = useAuth();
   const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const [chats, setChats] = useState([]);
@@ -24,6 +27,21 @@ export default function Home() {
   const [locationReady, setLocationReady] = useState(false);
   const [presence, setPresence] = useState({ onlineFriends: 0, totalFriends: 0 });
   const nearbyRadiusKm = 5;
+  const {
+    visibleNotifications,
+    sortedNotifications,
+    notificationActionLoadingIds,
+    handleNotificationRowClick,
+    handleJoinGroupCallFromNotification,
+    handleFriendRequestAction,
+    handleHangoutJoinRequestAction,
+  } = useNotificationsDropdownData({
+    accessToken,
+    nav,
+    joinGroupCall: null,
+    limit: 8,
+    enableBanner: false,
+  });
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -141,6 +159,13 @@ export default function Home() {
       ? avatarUrl
       : `${API_BASE}${avatarUrl}`;
   };
+  const getNotificationActorAvatar = (notification) => {
+    const avatarUrl = notification?.actor?.avatarUrl || "";
+    if (!avatarUrl) return "";
+    return avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://")
+      ? avatarUrl
+      : `${API_BASE}${avatarUrl}`;
+  };
 
   const getHangoutCreatorName = (hangout) =>
     hangout?.creator?.displayName || hangout?.creator?.username || "Unknown";
@@ -188,40 +213,38 @@ export default function Home() {
     return `${text.slice(0, maxLength)}...`;
   };
 
+  const truncateActivityPrimary = (value) => {
+    const text = String(value || "");
+    if (text.length <= 27) return text;
+    return `${text.slice(0, 27)}......`;
+  };
+
   const toTimeValue = (value) => {
     if (!value) return 0;
     const time = new Date(value).getTime();
     return Number.isNaN(time) ? 0 : time;
   };
 
-  const conversationActivity = chats
-    .map((chat, index) => {
-      const title = getChatTitle(chat);
-      const secondary = truncateText(chat.lastMessageText || "New activity in this chat");
-      const timestamp = chat.lastMessageAt || chat.updatedAt || null;
-      return {
-        id: String(chat?._id || `chat-${index}`),
-        primary: title,
-        secondary,
-        timestamp,
-        avatarUrl: getChatAvatar(chat),
-      };
-    })
-    .sort((a, b) => toTimeValue(b.timestamp) - toTimeValue(a.timestamp))
-    .slice(0, 8);
+  const objectIdToIsoTime = (id) => {
+    const raw = String(id || "").trim();
+    if (!/^[a-fA-F0-9]{24}$/.test(raw)) return null;
+    const seconds = Number.parseInt(raw.slice(0, 8), 16);
+    if (!Number.isFinite(seconds)) return null;
+    return new Date(seconds * 1000).toISOString();
+  };
+
+  const getHangoutActivityTimestamp = (hangout) => {
+    const updatedAtMs = toTimeValue(hangout?.updatedAt);
+    const createdAtMs = toTimeValue(hangout?.createdAt);
+    if (updatedAtMs > 0 && createdAtMs > 0) {
+      return updatedAtMs >= createdAtMs ? hangout.updatedAt : hangout.createdAt;
+    }
+    if (updatedAtMs > 0) return hangout.updatedAt;
+    if (createdAtMs > 0) return hangout.createdAt;
+    return objectIdToIsoTime(hangout?._id);
+  };
 
   const peoplePlacesActivity = [
-    ...(presence.totalFriends > 0 || presence.onlineFriends > 0
-      ? [
-          {
-            id: "friends-presence",
-            type: "friends",
-            primary: `${presence.onlineFriends} friends online`,
-            secondary: `of ${presence.totalFriends} total friends`,
-            timestamp: new Date().toISOString(),
-          },
-        ]
-      : []),
     ...hangouts.map((hangout, index) => {
       const creatorName = getHangoutCreatorName(hangout);
       const isLive = isHangoutOngoing(hangout);
@@ -232,10 +255,30 @@ export default function Home() {
         secondary: isLive
           ? `${getHangoutDistanceText(hangout)} away • ${getHangoutJoinedCount(hangout)} joined`
           : `Starts ${hangout.timeLabel || formatDateTime(hangout.startsAt) || "soon"}`,
-        timestamp: hangout.startsAt || hangout.createdAt || null,
+        timestamp: getHangoutActivityTimestamp(hangout),
         avatarUrl: getHangoutCreatorAvatar(hangout),
       };
     }),
+    ...sortedNotifications
+      .filter((notification) => notification?.type === "hangout_starts_at_updated")
+      .map((notification, index) => {
+        const actorName =
+          notification?.actor?.displayName ||
+          notification?.actor?.username ||
+          "Someone";
+        const title = notification?.hangout?.title || "a hangout";
+        const nextStartsAt = notification?.meta?.nextStartsAt;
+        return {
+          id: `start-update-${String(notification?._id || index)}`,
+          type: "hangout",
+          primary: `${actorName} updated ${truncateText(title, 30)}`,
+          secondary: `Starts ${
+            formatDateTime(nextStartsAt) || "time updated"
+          }`,
+          timestamp: notification?.createdAt || objectIdToIsoTime(notification?._id),
+          avatarUrl: getNotificationActorAvatar(notification),
+        };
+      }),
   ]
     .sort((a, b) => toTimeValue(b.timestamp) - toTimeValue(a.timestamp))
     .slice(0, 8);
@@ -283,12 +326,28 @@ export default function Home() {
 
   useEffect(() => {
     if (!accessToken || !coords) return;
-    setHangoutsLoading(true);
-    hangoutsApi
-      .feed(accessToken, { ...coords, radius: 5000 })
-      .then((data) => setHangouts(data.hangouts || []))
-      .catch((err) => setHangoutsError(err.message || "Failed to load hangouts"))
-      .finally(() => setHangoutsLoading(false));
+    const loadHangouts = () => {
+      setHangoutsLoading(true);
+      hangoutsApi
+        .feed(accessToken, { ...coords, radius: 5000 })
+        .then((data) => setHangouts(data.hangouts || []))
+        .catch((err) => setHangoutsError(err.message || "Failed to load hangouts"))
+        .finally(() => setHangoutsLoading(false));
+    };
+
+    loadHangouts();
+
+    const onHangoutActivity = () => {
+      loadHangouts();
+    };
+
+    socket.on("hangout:new", onHangoutActivity);
+    socket.on("hangout:update", onHangoutActivity);
+
+    return () => {
+      socket.off("hangout:new", onHangoutActivity);
+      socket.off("hangout:update", onHangoutActivity);
+    };
   }, [accessToken, coords]);
 
   useEffect(() => {
@@ -465,9 +524,9 @@ export default function Home() {
             <h3>Activity Feed</h3>
           </div>
           <div className="home-activity-columns">
-            <div className="home-activity-column">
-              <div className="home-activity-column-title">Conversations</div>
-              {conversationActivity.length === 0 ? (
+            <div className="home-activity-column home-updates-column">
+              <div className="home-activity-column-title">UPDATES</div>
+              {visibleNotifications.length === 0 ? (
                 <div className="home-activity-empty">
                   <img
                     src={messengerIcon}
@@ -475,39 +534,23 @@ export default function Home() {
                     aria-hidden="true"
                     className="home-activity-empty-icon"
                   />
-                  <div className="home-activity-empty-title">No conversation activity yet</div>
+                  <div className="home-activity-empty-title">No updates yet</div>
                   <div className="home-activity-empty-subtext">
-                    Messages from your chats will appear here.
+                    Friend, hangout, and request updates will appear here.
                   </div>
                 </div>
               ) : (
-                <div className="home-activity-list-modern">
-                  {conversationActivity.map((item) => (
-                    <div key={item.id} className="home-activity-row">
-                      <div className="home-activity-avatar-wrap">
-                        {item.avatarUrl ? (
-                          <img
-                            src={item.avatarUrl}
-                            alt={item.primary}
-                            className="home-activity-avatar"
-                          />
-                        ) : (
-                          <div className="home-activity-avatar-fallback">
-                            {getInitial(item.primary)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="home-activity-content">
-                        <div className="home-activity-top">
-                          <div className="home-activity-primary">{item.primary}</div>
-                          <div className="home-activity-time">
-                            {formatTimeAgo(item.timestamp) || "--"}
-                          </div>
-                        </div>
-                        <div className="home-activity-secondary">{item.secondary}</div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="home-updates-panel">
+                  <NotificationsList
+                    notifications={visibleNotifications}
+                    notificationActionLoadingIds={notificationActionLoadingIds}
+                    onRowClick={handleNotificationRowClick}
+                    onFriendRequestAction={handleFriendRequestAction}
+                    onHangoutJoinRequestAction={handleHangoutJoinRequestAction}
+                    onJoinGroupCall={handleJoinGroupCallFromNotification}
+                    emptyText="No updates yet"
+                    className="home-updates-list"
+                  />
                 </div>
               )}
             </div>
@@ -557,9 +600,11 @@ export default function Home() {
                       </div>
                       <div className="home-activity-content">
                         <div className="home-activity-top">
-                          <div className="home-activity-primary">{item.primary}</div>
+                          <div className="home-activity-primary">
+                            {truncateActivityPrimary(item.primary)}
+                          </div>
                           <div className="home-activity-time">
-                            {formatTimeAgo(item.timestamp) || "now"}
+                            {formatTimeAgo(item.timestamp) || "--"}
                           </div>
                         </div>
                         <div className="home-activity-secondary">{item.secondary}</div>

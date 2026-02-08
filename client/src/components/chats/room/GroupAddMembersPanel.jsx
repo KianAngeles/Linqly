@@ -230,7 +230,7 @@ export default function GroupAddMembersPanel({
       </div>
       <button
         type="button"
-        className="btn btn-primary btn-sm w-100 mt-3"
+        className="btn btn-sm w-100 mt-3 chat-add-people-btn"
         onClick={handleAdd}
         disabled={selectedIds.size === 0}
       >

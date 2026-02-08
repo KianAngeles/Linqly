@@ -53,6 +53,14 @@ const hangoutSchema = new mongoose.Schema(
         approvedAt: { type: Date, default: () => new Date() },
       },
     ],
+    startsAtEditEvents: [
+      {
+        editedById: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        previousStartsAt: { type: Date, required: true },
+        nextStartsAt: { type: Date, required: true },
+        editedAt: { type: Date, default: () => new Date() },
+      },
+    ],
   },
   { timestamps: true }
 );

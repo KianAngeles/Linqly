@@ -66,6 +66,26 @@ function emitJoinRequestResolved(chatId, userId) {
   io.to(String(chatId)).emit("chat:join-request:resolved", { chatId, userId });
 }
 
+function emitToUser(userId, event, payload = {}) {
+  if (!userId) return;
+  const io = getIO();
+  if (!io) return;
+  const socketIds = onlineUsers.get(String(userId));
+  if (!socketIds || socketIds.size === 0) return;
+  socketIds.forEach((socketId) => {
+    io.to(socketId).emit(event, payload);
+  });
+}
+
+function getGroupApproverIds(chat) {
+  const out = new Set();
+  if (chat?.creatorId) out.add(String(chat.creatorId));
+  for (const adminId of chat?.admins || []) {
+    out.add(String(adminId));
+  }
+  return Array.from(out);
+}
+
 async function emitSystemMessage(chatId, senderId, text) {
   if (!text) return;
   const msg = await Message.create({
@@ -312,7 +332,7 @@ router.post("/:chatId/members", authRequired, async (req, res) => {
   }
 
   const chat = await Chat.findById(chatId).select(
-    "members type creatorId admins requireAdminApproval pendingJoinRequests"
+    "members type creatorId admins name requireAdminApproval pendingJoinRequests"
   );
   if (!chat) return res.status(404).json({ message: "Chat not found" });
   if (chat.type !== "group") {
@@ -349,6 +369,14 @@ router.post("/:chatId/members", authRequired, async (req, res) => {
       { _id: chatId },
       {
         $push: { pendingJoinRequests: { userId, requestedAt } },
+        $push: {
+          groupJoinInviteRequestEvents: {
+            requestedByUserId: me,
+            targetUserId: userId,
+            requestedAt,
+            status: "pending",
+          },
+        },
       }
     );
     const requester = await User.findById(me).select("username");
@@ -365,12 +393,30 @@ router.post("/:chatId/members", authRequired, async (req, res) => {
       requestedUser?.username || "someone"
     }`;
     await emitSystemMessage(chatId, me, text);
+    const approverIds = getGroupApproverIds(chat).filter(
+      (id) => String(id) !== String(me)
+    );
+    approverIds.forEach((adminId) => {
+      emitToUser(adminId, "notifications:refresh", {
+        type: "group_add_request",
+        chatId: String(chatId),
+      });
+    });
     return res.json({ ok: true, pending: true });
   }
 
   await Chat.updateOne(
     { _id: chatId },
-    { $addToSet: { members: userId } }
+    {
+      $addToSet: { members: userId },
+      $push: {
+        groupMemberAddEvents: {
+          addedUserId: userId,
+          addedByUserId: me,
+          addedAt: new Date(),
+        },
+      },
+    }
   );
 
   const adder = await User.findById(me).select("username");
@@ -411,6 +457,11 @@ router.post("/:chatId/members", authRequired, async (req, res) => {
       createdAt: msg.createdAt,
     });
   }
+
+  emitToUser(userId, "notifications:refresh", {
+    type: "group_added_you",
+    chatId: String(chatId),
+  });
 
   res.json({ ok: true });
 });
@@ -962,7 +1013,7 @@ router.post("/:chatId/join-request", authRequired, async (req, res) => {
   }
 
   const chat = await Chat.findById(chatId).select(
-    "type members pendingJoinRequests requireAdminApproval"
+    "type members creatorId admins pendingJoinRequests requireAdminApproval"
   );
   if (!chat) return res.status(404).json({ message: "Chat not found" });
   if (chat.type !== "group") {
@@ -1008,6 +1059,15 @@ router.post("/:chatId/join-request", authRequired, async (req, res) => {
   });
   const text = `${requester?.username || "Someone"} requested to join the chat`;
   await emitSystemMessage(chatId, me, text);
+  const approverIds = getGroupApproverIds(chat).filter(
+    (id) => String(id) !== String(me)
+  );
+  approverIds.forEach((adminId) => {
+    emitToUser(adminId, "notifications:refresh", {
+      type: "group_join_request",
+      chatId: String(chatId),
+    });
+  });
   res.json({ ok: true, joined: false });
 });
 
@@ -1040,6 +1100,27 @@ router.post("/:chatId/join-request/:userId/approve", authRequired, async (req, r
     {
       $addToSet: { members: userId },
       $pull: { pendingJoinRequests: { userId } },
+      $push: {
+        groupMemberAddEvents: {
+          addedUserId: userId,
+          addedByUserId: me,
+          addedAt: new Date(),
+        },
+      },
+      $set: {
+        "groupJoinInviteRequestEvents.$[evt].status": "approved",
+        "groupJoinInviteRequestEvents.$[evt].resolvedAt": new Date(),
+        "groupJoinInviteRequestEvents.$[evt].resolvedByUserId": me,
+      },
+    }
+    ,
+    {
+      arrayFilters: [
+        {
+          "evt.targetUserId": new mongoose.Types.ObjectId(userId),
+          "evt.status": "pending",
+        },
+      ],
     }
   );
   emitJoinRequestResolved(chatId, userId);
@@ -1080,6 +1161,11 @@ router.post("/:chatId/join-request/:userId/approve", authRequired, async (req, r
     });
   }
 
+  emitToUser(userId, "notifications:refresh", {
+    type: "group_added_you",
+    chatId: String(chatId),
+  });
+
   res.json({ ok: true });
 });
 
@@ -1109,7 +1195,22 @@ router.post("/:chatId/join-request/:userId/reject", authRequired, async (req, re
 
   await Chat.updateOne(
     { _id: chatId },
-    { $pull: { pendingJoinRequests: { userId } } }
+    {
+      $pull: { pendingJoinRequests: { userId } },
+      $set: {
+        "groupJoinInviteRequestEvents.$[evt].status": "declined",
+        "groupJoinInviteRequestEvents.$[evt].resolvedAt": new Date(),
+        "groupJoinInviteRequestEvents.$[evt].resolvedByUserId": me,
+      },
+    },
+    {
+      arrayFilters: [
+        {
+          "evt.targetUserId": new mongoose.Types.ObjectId(userId),
+          "evt.status": "pending",
+        },
+      ],
+    }
   );
   emitJoinRequestResolved(chatId, userId);
 

@@ -1,14 +1,15 @@
 import { Link, matchPath, useLocation, useNavigate } from "react-router-dom";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../store/AuthContext";
 import { useCall } from "../../store/CallContext";
-import { GROUP_CALLS_ENABLED } from "../../constants/featureFlags";
 import { usersApi } from "../../api/users.api";
-import { notificationsApi } from "../../api/notifications.api";
-import { friendsApi } from "../../api/friends.api";
-import { hangoutsApi } from "../../api/hangouts.api";
-import { API_BASE } from "../../api/http";
-import { socket } from "../../socket";
+import NotificationsList from "../notifications/NotificationsList";
+import {
+  formatNotificationTime,
+  getNotificationMessage,
+  resolveAvatarUrl,
+  useNotificationsDropdownData,
+} from "../../hooks/useNotificationsDropdownData";
 import searchIcon from "../../assets/icons/friends-icons/search.png";
 import notificationBellIcon from "../../assets/icons/Header-icons/notification-bell.png";
 import moreIcon from "../../assets/icons/more.png";
@@ -26,13 +27,6 @@ const pageTitles = [
 
 const RECENT_USER_SEARCH_KEY = "linqly.header.recentUserSearches";
 const RECENT_USER_SEARCH_LIMIT = 4;
-const NOTIFICATION_DROPDOWN_LIMIT = 8;
-const BANNER_AUTO_HIDE_MS = 3000;
-const BANNER_EXIT_MS = 220;
-
-function byCreatedDesc(a, b) {
-  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-}
 
 function normalizeSearchUser(raw) {
   if (!raw) return null;
@@ -49,110 +43,6 @@ function normalizeSearchUser(raw) {
   };
 }
 
-function resolveAvatarUrl(rawUrl) {
-  if (!rawUrl) return "";
-  if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) return rawUrl;
-  return `${API_BASE}${rawUrl}`;
-}
-
-function normalizeNotification(raw, fallbackIndex = 0) {
-  if (!raw || typeof raw !== "object") return null;
-  const actorRaw = raw.actor || {};
-  const actorId = actorRaw._id || actorRaw.id || raw.meta?.requesterId || `actor-${fallbackIndex}`;
-  const actorUsername = actorRaw.username ? String(actorRaw.username).replace(/^@+/, "") : "";
-  const type =
-    raw.type === "friend_request" ||
-    raw.type === "friend_accept" ||
-    raw.type === "message_request" ||
-    raw.type === "message_request_accepted" ||
-    raw.type === "message_request_declined" ||
-    raw.type === "hangout_join_request" ||
-    raw.type === "hangout_join_request_accepted" ||
-    raw.type === "hangout_created" ||
-    raw.type === "hangout_joined" ||
-    raw.type === "group_call_started"
-      ? raw.type
-      : "friend_accept";
-  const status = raw.meta?.friendRequestStatus
-    ? String(raw.meta.friendRequestStatus)
-    : type === "friend_request"
-      ? "pending"
-      : null;
-
-  return {
-    _id: raw._id || raw.id || `${type}-${actorId}-${fallbackIndex}`,
-    type,
-    actor: {
-      _id: actorId,
-      displayName: actorRaw.displayName || actorRaw.name || actorRaw.username || "User",
-      username: actorUsername,
-      avatarUrl: actorRaw.avatarUrl || "",
-    },
-    hangout: raw.hangout
-      ? {
-          _id: raw.hangout._id || raw.hangout.id || "",
-          title: raw.hangout.title || "",
-        }
-      : null,
-    createdAt: raw.createdAt || new Date().toISOString(),
-    isRead: raw.isRead === true,
-    meta: {
-      ...(raw.meta || {}),
-      requesterId: raw.meta?.requesterId || actorId,
-      friendRequestStatus: status,
-    },
-  };
-}
-
-function formatNotificationTime(createdAt) {
-  const time = new Date(createdAt).getTime();
-  if (!Number.isFinite(time)) return "";
-  const diff = Date.now() - time;
-  if (diff < 60 * 1000) return "Just now";
-  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / (60 * 1000))}m ago`;
-  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / (60 * 60 * 1000))}h ago`;
-  if (diff < 7 * 24 * 60 * 60 * 1000) return `${Math.floor(diff / (24 * 60 * 60 * 1000))}d ago`;
-  return new Date(time).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function getNotificationMessage(notification) {
-  const hangoutTitle = notification?.hangout?.title || "a hangout";
-  if (notification?.type === "friend_request") {
-    const status = notification?.meta?.friendRequestStatus;
-    if (status === "accepted") return "Friend request accepted.";
-    if (status === "declined") return "Friend request declined.";
-    return "sent you a friend request.";
-  }
-  if (notification?.type === "friend_accept") {
-    return "accepted your friend request.";
-  }
-  if (notification?.type === "message_request") {
-    return "sent you a message request.";
-  }
-  if (notification?.type === "message_request_accepted") {
-    return "accepted your message request.";
-  }
-  if (notification?.type === "message_request_declined") {
-    return "declined your message request.";
-  }
-  if (notification?.type === "hangout_created") {
-    return `created a hangout: ${hangoutTitle}.`;
-  }
-  if (notification?.type === "hangout_join_request") {
-    return `has requested to join your hangout ${hangoutTitle}.`;
-  }
-  if (notification?.type === "hangout_join_request_accepted") {
-    return `has accepted your request to join ${hangoutTitle}.`;
-  }
-  if (notification?.type === "hangout_joined") {
-    return `joined your hangout: ${hangoutTitle}.`;
-  }
-  if (notification?.type === "group_call_started") {
-    return `started an ongoing call in ${notification?.meta?.chatName || "a group chat"}.`;
-  }
-  return "sent a notification.";
-}
-
 export default function HeaderBar() {
   const { pathname } = useLocation();
   const nav = useNavigate();
@@ -163,60 +53,30 @@ export default function HeaderBar() {
   const [recentSearches, setRecentSearches] = useState([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [bannerNotification, setBannerNotification] = useState(null);
-  const [isBannerVisible, setIsBannerVisible] = useState(false);
-  const [notificationActionLoadingIds, setNotificationActionLoadingIds] = useState([]);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const searchWrapRef = useRef(null);
   const notificationsWrapRef = useRef(null);
   const requestIdRef = useRef(0);
-  const hasBootstrappedNotificationsRef = useRef(false);
-  const seenNotificationIdsRef = useRef(new Set());
-  const bannerAutoHideTimerRef = useRef(null);
-  const bannerRemoveTimerRef = useRef(null);
-
-  const clearBannerTimers = useCallback(() => {
-    if (bannerAutoHideTimerRef.current) {
-      window.clearTimeout(bannerAutoHideTimerRef.current);
-      bannerAutoHideTimerRef.current = null;
-    }
-    if (bannerRemoveTimerRef.current) {
-      window.clearTimeout(bannerRemoveTimerRef.current);
-      bannerRemoveTimerRef.current = null;
-    }
-  }, []);
-
-  const dismissBanner = useCallback(() => {
-    if (bannerAutoHideTimerRef.current) {
-      window.clearTimeout(bannerAutoHideTimerRef.current);
-      bannerAutoHideTimerRef.current = null;
-    }
-    setIsBannerVisible(false);
-    if (bannerRemoveTimerRef.current) {
-      window.clearTimeout(bannerRemoveTimerRef.current);
-    }
-    bannerRemoveTimerRef.current = window.setTimeout(() => {
-      setBannerNotification(null);
-      bannerRemoveTimerRef.current = null;
-    }, BANNER_EXIT_MS);
-  }, []);
-
-  const showBanner = useCallback(
-    (notification) => {
-      if (!notification) return;
-      clearBannerTimers();
-      setBannerNotification(notification);
-      setIsBannerVisible(false);
-      window.requestAnimationFrame(() => {
-        setIsBannerVisible(true);
-      });
-      bannerAutoHideTimerRef.current = window.setTimeout(() => {
-        dismissBanner();
-      }, BANNER_AUTO_HIDE_MS);
-    },
-    [clearBannerTimers, dismissBanner]
-  );
+  const {
+    visibleNotifications,
+    hasMoreNotifications,
+    unreadCount,
+    notificationActionLoadingIds,
+    bannerNotification,
+    isBannerVisible,
+    dismissBanner,
+    handleNotificationRowClick,
+    handleJoinGroupCallFromNotification,
+    handleFriendRequestAction,
+    handleHangoutJoinRequestAction,
+  } = useNotificationsDropdownData({
+    accessToken,
+    nav,
+    joinGroupCall,
+    limit: 8,
+    enableBanner: true,
+    onInteraction: () => setIsNotificationsOpen(false),
+  });
 
   const title = useMemo(() => {
     for (const entry of pageTitles) {
@@ -294,105 +154,6 @@ export default function HeaderBar() {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  const loadNotifications = useCallback(
-    async ({ announceNew = true } = {}) => {
-      if (!accessToken) return;
-      try {
-        const data = await notificationsApi.list(accessToken);
-        const backendItems = Array.isArray(data?.notifications) ? data.notifications : [];
-        const normalized = backendItems
-          .map((item, idx) => normalizeNotification(item, idx))
-          .filter(Boolean)
-          .filter((item) => GROUP_CALLS_ENABLED || item.type !== "group_call_started")
-          .sort(byCreatedDesc);
-
-        const seenIds = seenNotificationIdsRef.current;
-        if (!hasBootstrappedNotificationsRef.current) {
-          normalized.forEach((item) => seenIds.add(String(item._id)));
-          hasBootstrappedNotificationsRef.current = true;
-          setNotifications(normalized);
-          return;
-        }
-
-        const unseen = normalized.filter((item) => !seenIds.has(String(item._id)));
-        normalized.forEach((item) => seenIds.add(String(item._id)));
-        setNotifications(normalized);
-
-        if (announceNew && unseen.length > 0) {
-          unseen.sort(byCreatedDesc);
-          showBanner(unseen[0]);
-        }
-      } catch {
-        setNotifications([]);
-      }
-    },
-    [accessToken, showBanner]
-  );
-
-  useEffect(() => {
-    if (!accessToken) {
-      clearBannerTimers();
-      setNotifications([]);
-      setBannerNotification(null);
-      setIsBannerVisible(false);
-      hasBootstrappedNotificationsRef.current = false;
-      seenNotificationIdsRef.current = new Set();
-      return;
-    }
-
-    loadNotifications({ announceNew: false });
-    const intervalId = window.setInterval(() => {
-      loadNotifications({ announceNew: true });
-    }, 30000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [accessToken, clearBannerTimers, loadNotifications]);
-
-  useEffect(() => {
-    if (!accessToken) return;
-    const refreshNotifications = () => {
-      loadNotifications({ announceNew: true });
-    };
-
-    socket.on("friends:request", refreshNotifications);
-    socket.on("friends:accepted", refreshNotifications);
-    socket.on("friends:updated", refreshNotifications);
-    socket.on("hangout:new", refreshNotifications);
-    socket.on("hangout:update", refreshNotifications);
-    socket.on("hangout_join_request:accepted", refreshNotifications);
-    socket.on("message_request:new", refreshNotifications);
-    socket.on("message_request:accepted", refreshNotifications);
-    socket.on("message_request:declined", refreshNotifications);
-    socket.on("chat:activated", refreshNotifications);
-    if (GROUP_CALLS_ENABLED) {
-      socket.on("group_call:notification", refreshNotifications);
-    }
-
-    return () => {
-      socket.off("friends:request", refreshNotifications);
-      socket.off("friends:accepted", refreshNotifications);
-      socket.off("friends:updated", refreshNotifications);
-      socket.off("hangout:new", refreshNotifications);
-      socket.off("hangout:update", refreshNotifications);
-      socket.off("hangout_join_request:accepted", refreshNotifications);
-      socket.off("message_request:new", refreshNotifications);
-    socket.off("message_request:accepted", refreshNotifications);
-    socket.off("message_request:declined", refreshNotifications);
-    socket.off("chat:activated", refreshNotifications);
-    if (GROUP_CALLS_ENABLED) {
-      socket.off("group_call:notification", refreshNotifications);
-    }
-    };
-  }, [accessToken, loadNotifications]);
-
-  useEffect(() => {
-    return () => {
-      clearBannerTimers();
-    };
-  }, [clearBannerTimers]);
-
   useEffect(() => {
     if (!accessToken) return;
     const query = searchQuery.trim();
@@ -435,19 +196,6 @@ export default function HeaderBar() {
 
   const dropdownItems = searchQuery.trim() ? searchResults : recentSearches;
   const showRecentHeader = !searchQuery.trim();
-  const sortedNotifications = useMemo(
-    () =>
-      [...notifications].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      ),
-    [notifications]
-  );
-  const visibleNotifications = useMemo(
-    () => sortedNotifications.slice(0, NOTIFICATION_DROPDOWN_LIMIT),
-    [sortedNotifications]
-  );
-  const hasMoreNotifications = sortedNotifications.length > NOTIFICATION_DROPDOWN_LIMIT;
-  const unreadCount = sortedNotifications.filter((n) => n.isRead === false).length;
 
   const submitSearch = () => {
     const query = String(searchQuery || "").trim();
@@ -492,202 +240,6 @@ export default function HeaderBar() {
     setIsNotificationsOpen((prev) => !prev);
     setIsDropdownOpen(false);
     setHighlightedIndex(-1);
-  };
-
-  const markNotificationRead = (notificationId) => {
-    setNotifications((prev) =>
-      prev.map((item) =>
-        String(item._id) === String(notificationId) ? { ...item, isRead: true } : item
-      )
-    );
-  };
-
-  const handleNotificationRowClick = (notification) => {
-    if (!notification) return;
-    markNotificationRead(notification._id);
-    setIsNotificationsOpen(false);
-
-    if (notification.type === "friend_request") {
-      const username = notification.actor?.username
-        ? encodeURIComponent(notification.actor.username)
-        : "";
-      if (username) {
-        nav(`/app/profile/${username}`);
-        return;
-      }
-      nav("/app/friends");
-      return;
-    }
-    if (notification.type === "friend_accept") {
-      nav("/app/friends");
-      return;
-    }
-    if (notification.type === "message_request") {
-      const chatId = String(notification?.meta?.chatId || "").trim();
-      if (chatId) {
-        nav(`/app/chats/${chatId}`);
-      } else {
-        nav("/app/chats");
-      }
-      return;
-    }
-    if (notification.type === "message_request_accepted") {
-      const chatId = String(notification?.meta?.chatId || "").trim();
-      if (chatId) {
-        nav(`/app/chats/${chatId}`);
-      } else {
-        nav("/app/chats");
-      }
-      return;
-    }
-    if (notification.type === "message_request_declined") {
-      nav("/app/chats");
-      return;
-    }
-    if (notification.type === "hangout_join_request") {
-      const hangoutId = String(notification?.meta?.hangoutId || notification?.hangout?._id || "").trim();
-      if (hangoutId) {
-        nav(`/app/map?hangoutId=${encodeURIComponent(hangoutId)}`);
-      } else {
-        nav("/app/map");
-      }
-      return;
-    }
-    if (notification.type === "hangout_join_request_accepted") {
-      const hangoutId = String(notification?.meta?.hangoutId || notification?.hangout?._id || "").trim();
-      if (hangoutId) {
-        nav(`/app/map?hangoutId=${encodeURIComponent(hangoutId)}`);
-      } else {
-        nav("/app/map");
-      }
-      return;
-    }
-    if (notification.type === "hangout_created" || notification.type === "hangout_joined") {
-      const hangoutId = String(notification?.hangout?._id || notification?.meta?.hangoutId || "").trim();
-      if (hangoutId) {
-        nav(`/app/map?hangoutId=${encodeURIComponent(hangoutId)}`);
-      } else {
-        nav("/app/map");
-      }
-      return;
-    }
-    if (notification.type === "group_call_started") {
-      const chatId = String(notification?.meta?.chatId || "").trim();
-      if (chatId) {
-        nav(`/app/chats/${chatId}`);
-      } else {
-        nav("/app/chats");
-      }
-      return;
-    }
-    nav("/app/notifications");
-  };
-
-  const handleJoinGroupCallFromNotification = async (notification) => {
-    if (!GROUP_CALLS_ENABLED) return;
-    if (!notification) return;
-    const chatId = String(notification?.meta?.chatId || "").trim();
-    if (!chatId) return;
-    const callId = String(notification?.meta?.callId || "").trim();
-    await joinGroupCall({
-      chatId,
-      callId,
-      chatName: notification?.meta?.chatName || "",
-      startedByName: notification?.actor?.displayName || notification?.actor?.username || "",
-    });
-    nav(`/app/chats/${chatId}`);
-    markNotificationRead(notification._id);
-    setIsNotificationsOpen(false);
-  };
-
-  const handleFriendRequestAction = async (notification, action) => {
-    const notificationId = notification?._id;
-    const requesterId = notification?.meta?.requesterId || notification?.actor?._id;
-    if (!notificationId || !requesterId) return;
-
-    const idKey = String(notificationId);
-    const applyLocalStatus = () => {
-      setNotifications((prev) =>
-        prev.map((item) =>
-          String(item._id) === idKey
-            ? {
-                ...item,
-                isRead: true,
-                meta: {
-                  ...(item.meta || {}),
-                  friendRequestStatus: action === "accept" ? "accepted" : "declined",
-                },
-              }
-            : item
-        )
-      );
-    };
-
-    if (!accessToken) return;
-
-    setNotificationActionLoadingIds((prev) =>
-      prev.includes(idKey) ? prev : [...prev, idKey]
-    );
-
-    try {
-      if (action === "accept") {
-        await friendsApi.accept(accessToken, requesterId);
-      } else {
-        await friendsApi.reject(accessToken, requesterId);
-      }
-      applyLocalStatus();
-    } catch {
-      // keep current notification state when action fails
-    } finally {
-      setNotificationActionLoadingIds((prev) =>
-        prev.filter((loadingId) => loadingId !== idKey)
-      );
-    }
-  };
-
-  const handleHangoutJoinRequestAction = async (notification, action) => {
-    const notificationId = notification?._id;
-    const hangoutId = String(notification?.meta?.hangoutId || notification?.hangout?._id || "").trim();
-    const requestUserId = String(notification?.meta?.requestUserId || notification?.actor?._id || "").trim();
-    if (!notificationId || !hangoutId || !requestUserId) return;
-    if (!accessToken) return;
-
-    const idKey = String(notificationId);
-    const applyLocalStatus = () => {
-      setNotifications((prev) =>
-        prev.map((item) =>
-          String(item._id) === idKey
-            ? {
-                ...item,
-                isRead: true,
-                meta: {
-                  ...(item.meta || {}),
-                  hangoutJoinRequestStatus: action === "accept" ? "accepted" : "declined",
-                },
-              }
-            : item
-        )
-      );
-    };
-
-    setNotificationActionLoadingIds((prev) =>
-      prev.includes(idKey) ? prev : [...prev, idKey]
-    );
-
-    try {
-      if (action === "accept") {
-        await hangoutsApi.acceptJoinRequest(accessToken, hangoutId, requestUserId);
-      } else {
-        await hangoutsApi.declineJoinRequest(accessToken, hangoutId, requestUserId);
-      }
-      applyLocalStatus();
-    } catch {
-      // keep current notification state when action fails
-    } finally {
-      setNotificationActionLoadingIds((prev) =>
-        prev.filter((loadingId) => loadingId !== idKey)
-      );
-    }
   };
 
   const bannerActorName =
@@ -866,146 +418,15 @@ export default function HeaderBar() {
               </div>
               <div className="app-header-notifications-divider" />
 
-              {visibleNotifications.length === 0 ? (
-                <div className="app-header-notifications-empty">No notifications yet</div>
-              ) : (
-                <div className="app-header-notifications-list">
-                  {visibleNotifications.map((notification) => {
-                    const actorName =
-                      notification.actor?.displayName ||
-                      notification.actor?.username ||
-                      "User";
-                    const avatarUrl = resolveAvatarUrl(notification.actor?.avatarUrl || "");
-                    const message = getNotificationMessage(notification);
-                    const timestamp = formatNotificationTime(notification.createdAt);
-                    const requestStatus = notification?.meta?.friendRequestStatus;
-                    const hangoutRequestStatus =
-                      notification?.meta?.hangoutJoinRequestStatus ||
-                      notification?.meta?.joinRequestStatus;
-                    const showFriendRequestActions =
-                      notification.type === "friend_request" &&
-                      requestStatus !== "accepted" &&
-                      requestStatus !== "declined";
-                    const showHangoutJoinRequestActions =
-                      notification.type === "hangout_join_request" &&
-                      hangoutRequestStatus !== "accepted" &&
-                      hangoutRequestStatus !== "declined";
-                    const showGroupCallJoinAction =
-                      GROUP_CALLS_ENABLED && notification.type === "group_call_started";
-                    const actionLoading = notificationActionLoadingIds.includes(
-                      String(notification._id)
-                    );
-
-                    return (
-                      <div
-                        key={notification._id}
-                        role="button"
-                        tabIndex={0}
-                        className="app-header-notification-row"
-                        onClick={() => handleNotificationRowClick(notification)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            handleNotificationRowClick(notification);
-                          }
-                        }}
-                      >
-                        {avatarUrl ? (
-                          <img
-                            src={avatarUrl}
-                            alt={actorName}
-                            className="app-header-notification-avatar"
-                          />
-                        ) : (
-                          <div className="app-header-notification-avatar app-header-notification-avatar-fallback">
-                            {String(actorName || "?").charAt(0).toUpperCase()}
-                          </div>
-                        )}
-
-                        <div className="app-header-notification-body">
-                          <div className="app-header-notification-name">{actorName}</div>
-                          <div className="app-header-notification-message">{message}</div>
-                          <div className="app-header-notification-time">{timestamp}</div>
-                          {showFriendRequestActions && (
-                            <div
-                              className="app-header-notification-actions"
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            >
-                              <button
-                                type="button"
-                                className="btn btn-dark btn-sm app-header-notification-action-btn"
-                                onClick={() =>
-                                  handleFriendRequestAction(notification, "accept")
-                                }
-                                disabled={actionLoading}
-                              >
-                                Accept
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-outline-secondary btn-sm app-header-notification-action-btn"
-                                onClick={() =>
-                                  handleFriendRequestAction(notification, "decline")
-                                }
-                                disabled={actionLoading}
-                              >
-                                Decline
-                              </button>
-                            </div>
-                          )}
-                          {showHangoutJoinRequestActions && (
-                            <div
-                              className="app-header-notification-actions"
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            >
-                              <button
-                                type="button"
-                                className="btn btn-dark btn-sm app-header-notification-action-btn"
-                                onClick={() =>
-                                  handleHangoutJoinRequestAction(notification, "accept")
-                                }
-                                disabled={actionLoading}
-                              >
-                                Accept
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-outline-secondary btn-sm app-header-notification-action-btn"
-                                onClick={() =>
-                                  handleHangoutJoinRequestAction(notification, "decline")
-                                }
-                                disabled={actionLoading}
-                              >
-                                Decline
-                              </button>
-                            </div>
-                          )}
-                          {showGroupCallJoinAction && (
-                            <div
-                              className="app-header-notification-actions"
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            >
-                              <button
-                                type="button"
-                                className="btn btn-dark btn-sm app-header-notification-action-btn"
-                                onClick={() =>
-                                  handleJoinGroupCallFromNotification(notification)
-                                }
-                                disabled={actionLoading}
-                              >
-                                Join
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <NotificationsList
+                notifications={visibleNotifications}
+                notificationActionLoadingIds={notificationActionLoadingIds}
+                onRowClick={handleNotificationRowClick}
+                onFriendRequestAction={handleFriendRequestAction}
+                onHangoutJoinRequestAction={handleHangoutJoinRequestAction}
+                onJoinGroupCall={handleJoinGroupCallFromNotification}
+                emptyText="No notifications yet"
+              />
 
               {hasMoreNotifications && (
                 <>

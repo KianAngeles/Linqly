@@ -713,7 +713,7 @@ export default function ChatsPanel() {
                   <div className="d-flex gap-2">
                     <button
                       type="button"
-                      className="btn btn-sm btn-success"
+                      className="btn btn-sm btn-dark"
                       onClick={() => approveJoin(r.user.id)}
                     >
                       Approve
@@ -1193,7 +1193,7 @@ export default function ChatsPanel() {
           </button>
           <button
             type="button"
-            className="btn btn-primary w-100"
+            className="btn btn-dark w-100"
             onClick={() => {
               removeMember(removeMemberTarget.id);
               setRemoveMemberTarget(null);

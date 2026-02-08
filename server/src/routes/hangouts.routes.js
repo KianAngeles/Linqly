@@ -688,6 +688,9 @@ router.patch("/:id", authRequired, async (req, res) => {
     joinPolicy: requestedJoinPolicy,
   } = req.body;
   const prevTitle = doc.title;
+  const previousStartsAtMs = new Date(doc.startsAt).getTime();
+  let startsAtChanged = false;
+  let nextStartsAtValue = null;
   if (title !== undefined) {
     if (!title || !title.trim()) {
       return res.status(400).json({ message: "Title is required" });
@@ -723,6 +726,12 @@ router.patch("/:id", authRequired, async (req, res) => {
     if (error) return res.status(400).json({ message: error });
     doc.startsAt = start;
     doc.endsAt = end;
+    nextStartsAtValue = start;
+    const nextStartsAtMs = new Date(start).getTime();
+    startsAtChanged =
+      Number.isFinite(previousStartsAtMs) &&
+      Number.isFinite(nextStartsAtMs) &&
+      previousStartsAtMs !== nextStartsAtMs;
   }
 
   if (req.body.maxAttendees !== undefined) {
@@ -742,6 +751,21 @@ router.patch("/:id", authRequired, async (req, res) => {
   }
 
   await doc.save();
+  if (startsAtChanged && nextStartsAtValue) {
+    await Hangout.updateOne(
+      { _id: id },
+      {
+        $push: {
+          startsAtEditEvents: {
+            editedById: me,
+            previousStartsAt: new Date(previousStartsAtMs),
+            nextStartsAt: nextStartsAtValue,
+            editedAt: new Date(),
+          },
+        },
+      }
+    );
+  }
   await doc.populate("creatorId", "username displayName avatarUrl");
   await doc.populate("attendeeIds", "username displayName avatarUrl");
 

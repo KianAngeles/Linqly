@@ -1,4 +1,4 @@
-import downIcon from "../assets/icons/down.png";
+import downIcon from "../assets/icons/chat-settings-icons/dropdown.png";
 
 export default function AccordionSection({
   title,

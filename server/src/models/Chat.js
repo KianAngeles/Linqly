@@ -43,6 +43,35 @@ const chatSchema = new mongoose.Schema(
         requestedAt: { type: Date, default: Date.now },
       },
     ],
+    groupMemberAddEvents: [
+      {
+        addedUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        addedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        addedAt: { type: Date, default: Date.now },
+      },
+    ],
+    groupJoinInviteRequestEvents: [
+      {
+        requestedByUserId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        targetUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        requestedAt: { type: Date, default: Date.now },
+        status: {
+          type: String,
+          enum: ["pending", "approved", "declined"],
+          default: "pending",
+        },
+        resolvedAt: { type: Date, default: null },
+        resolvedByUserId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+      },
+    ],
     requireAdminApproval: { type: Boolean, default: false },
     allowAnyoneCall: { type: Boolean, default: true },
     nicknames: { type: Map, of: String, default: {} },

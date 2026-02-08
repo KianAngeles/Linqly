@@ -1,8 +1,10 @@
 const express = require("express");
 const Friendship = require("../models/Friendship");
 const Hangout = require("../models/Hangout");
+const Chat = require("../models/Chat");
 const MessageRequest = require("../models/MessageRequest");
 const GroupCallNotification = require("../models/GroupCallNotification");
+const NotificationState = require("../models/NotificationState");
 const { authRequired } = require("../middleware/authRequired");
 
 const router = express.Router();
@@ -42,7 +44,11 @@ router.get("/", authRequired, async (req, res) => {
     incomingMessageRequests,
     outgoingMessageRequestUpdates,
     acceptedHangoutJoinEvents,
+    attendedHangoutsWithStartEdits,
+    groupMemberAddedToChatEvents,
+    groupInviteRequestEvents,
     groupCallNotifications,
+    notificationState,
   ] =
     await Promise.all([
       getFriendIds(me),
@@ -77,6 +83,36 @@ router.get("/", authRequired, async (req, res) => {
         .limit(30)
         .populate("creatorId", "username displayName avatarUrl")
         .select("title creatorId approvedJoinEvents createdAt updatedAt"),
+      Hangout.find({
+        attendeeIds: me,
+        creatorId: { $ne: me },
+        "startsAtEditEvents.0": { $exists: true },
+      })
+        .sort({ updatedAt: -1 })
+        .limit(40)
+        .populate("creatorId", "username displayName avatarUrl")
+        .select("title creatorId startsAtEditEvents createdAt updatedAt"),
+      Chat.find({
+        type: "group",
+        "groupMemberAddEvents.addedUserId": me,
+      })
+        .sort({ updatedAt: -1 })
+        .limit(40)
+        .populate("groupMemberAddEvents.addedByUserId", "username displayName avatarUrl")
+        .select("name groupMemberAddEvents createdAt updatedAt"),
+      Chat.find({
+        type: "group",
+        $or: [{ creatorId: me }, { admins: me }],
+        "groupJoinInviteRequestEvents.status": "pending",
+      })
+        .sort({ updatedAt: -1 })
+        .limit(40)
+        .populate(
+          "groupJoinInviteRequestEvents.requestedByUserId",
+          "username displayName avatarUrl"
+        )
+        .populate("groupJoinInviteRequestEvents.targetUserId", "username displayName avatarUrl")
+        .select("name creatorId admins groupJoinInviteRequestEvents createdAt updatedAt"),
       GROUP_CALLS_ENABLED
         ? GroupCallNotification.find({ userId: me, callStatus: "started" })
             .sort({ createdAt: -1 })
@@ -84,6 +120,9 @@ router.get("/", authRequired, async (req, res) => {
             .populate("actorId", "username displayName avatarUrl")
             .select("actorId chatId callId chatName actorName createdAt")
         : Promise.resolve([]),
+      NotificationState.findOne({ userId: me }).select(
+        "readNotificationIds hiddenNotificationIds markAllReadAt"
+      ),
     ]);
 
   let friendCreatedHangouts = [];
@@ -194,6 +233,81 @@ router.get("/", authRequired, async (req, res) => {
       });
   });
 
+  attendedHangoutsWithStartEdits.forEach((doc) => {
+    const actor = toActor(doc.creatorId);
+    if (!actor) return;
+    const events = Array.isArray(doc.startsAtEditEvents) ? doc.startsAtEditEvents : [];
+    events.forEach((entry) => {
+      const eventId = String(entry?._id || "").trim();
+      notifications.push({
+        _id: `hangout-starts-at-updated-${doc._id}-${eventId || String(entry?.editedAt || "event")}`,
+        type: "hangout_starts_at_updated",
+        actor,
+        hangout: { _id: doc._id, title: doc.title || "Hangout" },
+        createdAt: entry?.editedAt || doc.updatedAt || doc.createdAt,
+        isRead: false,
+        meta: {
+          hangoutId: String(doc._id),
+          previousStartsAt: entry?.previousStartsAt || null,
+          nextStartsAt: entry?.nextStartsAt || null,
+        },
+      });
+    });
+  });
+
+  groupMemberAddedToChatEvents.forEach((doc) => {
+    const events = Array.isArray(doc.groupMemberAddEvents) ? doc.groupMemberAddEvents : [];
+    events
+      .filter((entry) => String(entry?.addedUserId || "") === String(me))
+      .forEach((entry) => {
+        const actor = toActor(entry?.addedByUserId);
+        if (!actor) return;
+        notifications.push({
+          _id: `group-chat-added-you-${doc._id}-${entry?._id || entry?.addedAt || "event"}`,
+          type: "group_chat_added_you",
+          actor,
+          createdAt: entry?.addedAt || doc.updatedAt || doc.createdAt,
+          isRead: false,
+          meta: {
+            chatId: String(doc._id),
+            chatName: String(doc?.name || "Group chat"),
+          },
+        });
+      });
+  });
+
+  groupInviteRequestEvents.forEach((doc) => {
+    const isAdminOrCreator =
+      String(doc?.creatorId || "") === String(me) ||
+      (Array.isArray(doc?.admins)
+        ? doc.admins.some((adminId) => String(adminId) === String(me))
+        : false);
+    if (!isAdminOrCreator) return;
+    const events = Array.isArray(doc.groupJoinInviteRequestEvents)
+      ? doc.groupJoinInviteRequestEvents
+      : [];
+    events
+      .filter((entry) => String(entry?.status || "") === "pending")
+      .forEach((entry) => {
+        const actor = toActor(entry?.requestedByUserId);
+        if (!actor) return;
+        const targetName =
+          entry?.targetUserId?.displayName || entry?.targetUserId?.username || "someone";
+        notifications.push({
+          _id: `group-chat-add-request-${doc._id}-${entry?._id || entry?.requestedAt || "event"}`,
+          type: "group_chat_add_request",
+          actor,
+          createdAt: entry?.requestedAt || doc.updatedAt || doc.createdAt,
+          isRead: false,
+          meta: {
+            chatId: String(doc._id),
+            chatName: String(doc?.name || "Group chat"),
+            targetDisplayName: String(targetName),
+          },
+        });
+      });
+  });
+
   acceptedOutgoing.forEach((doc) => {
     const actor = toActor(doc.receiverId);
     if (!actor) return;
@@ -261,7 +375,84 @@ router.get("/", authRequired, async (req, res) => {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
-  return res.json({ notifications: notifications.slice(0, 80) });
+  const readIds = new Set(notificationState?.readNotificationIds || []);
+  const hiddenIds = new Set(notificationState?.hiddenNotificationIds || []);
+  const markAllReadAtMs = notificationState?.markAllReadAt
+    ? new Date(notificationState.markAllReadAt).getTime()
+    : 0;
+
+  const merged = notifications
+    .filter((item) => !hiddenIds.has(String(item._id)))
+    .map((item) => {
+      const createdAtMs = new Date(item.createdAt).getTime();
+      const readByMarkAll =
+        Number.isFinite(createdAtMs) &&
+        markAllReadAtMs > 0 &&
+        createdAtMs <= markAllReadAtMs;
+      return {
+        ...item,
+        isRead:
+          item.isRead === true ||
+          readIds.has(String(item._id)) ||
+          readByMarkAll,
+      };
+    });
+
+  return res.json({ notifications: merged.slice(0, 80) });
+});
+
+// POST /notifications/read
+router.post("/read", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const notificationId = String(req.body?.notificationId || "").trim();
+  if (!notificationId) {
+    return res.status(400).json({ message: "notificationId is required" });
+  }
+
+  await NotificationState.findOneAndUpdate(
+    { userId: me },
+    {
+      $addToSet: { readNotificationIds: notificationId },
+      $pull: { hiddenNotificationIds: notificationId },
+    },
+    { upsert: true, new: false }
+  );
+
+  return res.json({ ok: true });
+});
+
+// POST /notifications/read-all
+router.post("/read-all", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  await NotificationState.findOneAndUpdate(
+    { userId: me },
+    { $set: { markAllReadAt: new Date() } },
+    { upsert: true, new: false }
+  );
+  return res.json({ ok: true });
+});
+
+// POST /notifications/clear-read
+router.post("/clear-read", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const notificationIds = Array.isArray(req.body?.notificationIds)
+    ? req.body.notificationIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+
+  if (notificationIds.length === 0) {
+    return res.json({ ok: true, cleared: 0 });
+  }
+
+  await NotificationState.findOneAndUpdate(
+    { userId: me },
+    {
+      $addToSet: { hiddenNotificationIds: { $each: notificationIds } },
+      $pullAll: { readNotificationIds: notificationIds },
+    },
+    { upsert: true, new: false }
+  );
+
+  return res.json({ ok: true, cleared: notificationIds.length });
 });
 
 module.exports = router;

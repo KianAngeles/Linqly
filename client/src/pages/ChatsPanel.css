@@ -2484,6 +2484,10 @@
   height: 19px;
 }
 
+.btn-primary{
+  background-color: black;
+}
+
 .chat-header-call-btn:active {
   transform: scale(0.92);
   background: rgba(15, 23, 42, 0.08);
@@ -2742,11 +2746,11 @@
 }
 
 .chat-add-member-row:hover {
-  background: rgba(37, 99, 235, 0.06);
+  background: rgba(15, 23, 42, 0.06);
 }
 
 .chat-add-member-row:hover .chat-add-member-toggle {
-  border-color: rgba(37, 99, 235, 0.8);
+  border-color: #111827;
 }
 
 .chat-add-member-avatar {
@@ -2777,7 +2781,7 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 2px solid rgba(37, 99, 235, 0.5);
+  border: 2px solid rgba(17, 24, 39, 0.55);
   background: transparent;
   display: inline-flex;
   align-items: center;
@@ -2787,8 +2791,8 @@
 }
 
 .chat-add-member-toggle.is-selected {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: #111827;
+  border-color: #111827;
 }
 
 .chat-add-member-check {
@@ -2801,6 +2805,25 @@
 }
 
 .chat-add-member-check.is-selected {
-  border-color: #2563eb;
-  background: #2563eb;
+  border-color: #111827;
+  background: #111827;
+}
+
+.chat-add-people-btn {
+  background: #111827 !important;
+  border-color: #111827 !important;
+  color: #ffffff !important;
+}
+
+.chat-add-people-btn:hover,
+.chat-add-people-btn:focus {
+  background: #0b0f1a !important;
+  border-color: #0b0f1a !important;
+  color: #ffffff !important;
+}
+
+.chat-add-people-btn:disabled {
+  background: #4b5563 !important;
+  border-color: #4b5563 !important;
+  color: #e5e7eb !important;
 }

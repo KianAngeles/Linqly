@@ -75,7 +75,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="app-sidebar-nav">
-        <div className="app-sidebar-section">
+        <div className="app-sidebar-section app-sidebar-section-main">
           <div className="app-sidebar-section-title">MAIN</div>
           {mainItems.map((item) => (
             <NavLink
@@ -95,7 +95,7 @@ export default function Sidebar() {
           ))}
         </div>
 
-        <div className="app-sidebar-section">
+        <div className="app-sidebar-section app-sidebar-section-account">
           <div className="app-sidebar-section-title">ACCOUNT</div>
           {accountItems.map((item) => (
             <NavLink

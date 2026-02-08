@@ -25,6 +25,15 @@ const FALLBACK_CENTER = { lng: 120.9842, lat: 14.5995 };
 const DEFAULT_RADIUS_METERS = 8000;
 const MAP_STATE_KEY = "linqly.hangouts.mapState";
 const HANGOUT_PIN_OFFSET = [0, -5];
+const CLOSED_HANGOUT_STATUSES = new Set([
+  "closed",
+  "ended",
+  "completed",
+  "cancelled",
+  "canceled",
+  "done",
+  "inactive",
+]);
 
 function formatDateTime(value) {
   if (!value) return "-";
@@ -42,6 +51,15 @@ function formatDistance(meters) {
 function getInitial(value) {
   if (!value) return "H";
   return value.trim().charAt(0).toUpperCase();
+}
+
+function isHangoutClosed(hangout) {
+  if (!hangout || typeof hangout !== "object") return true;
+  const status = String(hangout.status || "").toLowerCase().trim();
+  if (CLOSED_HANGOUT_STATUSES.has(status)) return true;
+  const endsAtMs = hangout?.endsAt ? new Date(hangout.endsAt).getTime() : NaN;
+  if (Number.isFinite(endsAtMs) && endsAtMs < new Date().getTime()) return true;
+  return false;
 }
 
 function resolveAvatar(avatarUrl) {
@@ -213,9 +231,12 @@ export default function HangoutsMap() {
   }));
   const [searchParams] = useSearchParams();
   const hangoutIdParam = searchParams.get("hangoutId");
+  const hangoutClosedParam = searchParams.get("hangoutClosed");
+  const hangoutTitleParam = searchParams.get("hangoutTitle");
   const handledHangoutIdRef = useRef(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [removeAttendeeTarget, setRemoveAttendeeTarget] = useState(null);
+  const [showHangoutClosedModal, setShowHangoutClosedModal] = useState(false);
 
   const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN || "", []);
 
@@ -226,6 +247,12 @@ export default function HangoutsMap() {
       setSearchCountry(region.toLowerCase());
     }
   }, []);
+
+  useEffect(() => {
+    if (hangoutClosedParam === "1") {
+      setShowHangoutClosedModal(true);
+    }
+  }, [hangoutClosedParam]);
 
   useEffect(() => {
     if (!mapboxToken || !userLocation) return;
@@ -724,9 +751,20 @@ export default function HangoutsMap() {
     setIsDetailLoading(true);
     try {
       const data = await hangoutsApi.get(accessToken, hangoutId);
-      setSelected(data.hangout);
+      const hangout = data?.hangout || null;
+      if (isHangoutClosed(hangout)) {
+        setSelected(null);
+        if (hangoutIdParam && String(hangoutIdParam) === String(hangoutId)) {
+          setShowHangoutClosedModal(true);
+        }
+      } else {
+        setSelected(hangout);
+      }
     } catch {
       setSelected(null);
+      if (hangoutIdParam && String(hangoutIdParam) === String(hangoutId)) {
+        setShowHangoutClosedModal(true);
+      }
     } finally {
       setIsDetailLoading(false);
     }
@@ -751,6 +789,13 @@ export default function HangoutsMap() {
     handledHangoutIdRef.current = hangoutIdParam;
     const found = feed.find((h) => h._id === hangoutIdParam);
     if (found) {
+      if (isHangoutClosed(found)) {
+        setSelectedId(null);
+        setSelected(null);
+        setDetailPlacement(null);
+        setShowHangoutClosedModal(true);
+        return;
+      }
       setSelectedId(found._id);
       setSelected(found);
       setDetailPlacement("joined");
@@ -1492,6 +1537,16 @@ export default function HangoutsMap() {
     setDetailPlacement(null);
   }
 
+  function closeHangoutClosedModal() {
+    setShowHangoutClosedModal(false);
+    const next = new URLSearchParams(searchParams);
+    next.delete("hangoutClosed");
+    next.delete("hangoutTitle");
+    next.delete("hangoutId");
+    const query = next.toString();
+    nav(query ? `/app/map?${query}` : "/app/map", { replace: true });
+  }
+
   function renderHangoutList(items, emptyCopy, placement) {
     if (isLoading) {
       return <div className="hangouts-panel-muted">Loading hangouts...</div>;
@@ -1884,6 +1939,44 @@ export default function HangoutsMap() {
                   </button>
                   <button type="button" className="btn btn-danger" onClick={confirmRemoveAttendee}>
                     Remove attendee
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+      {showHangoutClosedModal && (
+        <>
+          <div className="modal-backdrop show" />
+          <div className="modal d-block" tabIndex="-1" role="dialog">
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Hangout closed</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={closeHangoutClosedModal}
+                  />
+                </div>
+                <div className="modal-body">
+                  <div className="fw-semibold mb-2">
+                    This hangout is no longer available.
+                  </div>
+                  <div className="text-muted small">
+                    {hangoutTitleParam
+                      ? `"${hangoutTitleParam}" has already closed or was removed.`
+                      : "The hangout has already closed or was removed."}
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-dark"
+                    onClick={closeHangoutClosedModal}
+                  >
+                    OK
                   </button>
                 </div>
               </div>

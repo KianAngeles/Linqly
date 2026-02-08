@@ -496,6 +496,78 @@
   padding: 0 2px;
 }
 
+.home-updates-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.home-updates-column .app-header-notifications-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.home-updates-column .app-header-notification-row {
+  padding: 10px 8px;
+}
+
+.home-updates-column .app-header-notification-avatar {
+  width: 40px;
+  height: 40px;
+}
+
+.home-updates-column .app-header-notification-avatar-fallback {
+  width: 40px;
+  height: 40px;
+}
+
+.home-updates-column .app-header-notification-row {
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.home-updates-column .app-header-notification-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name time"
+    "message time"
+    "actions actions";
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: center;
+}
+
+.home-updates-column .app-header-notification-name {
+  grid-area: name;
+}
+
+.home-updates-column .app-header-notification-name {
+  font-size: 0.86rem;
+}
+
+.home-updates-column .app-header-notification-message {
+  grid-area: message;
+  font-size: 0.8rem;
+  color: #4b5563;
+}
+
+.home-updates-column .app-header-notification-time {
+  grid-area: time;
+  align-self: center;
+  text-align: right;
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.home-updates-column .app-header-notification-actions {
+  grid-area: actions;
+}
+
+.home-updates-column .app-header-notifications-footer {
+  padding: 6px 2px 0;
+}
+
 .home-activity-list-modern {
   display: grid;
   gap: 6px;
