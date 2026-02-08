@@ -80,14 +80,14 @@
 
 .hangout-list-item:hover,
 .hangout-list-item:focus {
-  border-color: #cfe2ff;
-  box-shadow: 0 6px 16px rgba(13, 110, 253, 0.12);
+  border-color: #111827;
+  box-shadow: 0 6px 16px rgba(17, 24, 39, 0.12);
   outline: none;
 }
 
 .hangout-list-item.is-active {
-  border-color: #0d6efd;
-  box-shadow: 0 6px 16px rgba(13, 110, 253, 0.18);
+  border-color: #111827;
+  box-shadow: 0 6px 16px rgba(17, 24, 39, 0.18);
 }
 
 .hangout-list-avatar {
@@ -100,6 +100,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.hangout-list-avatar-img {
+  object-fit: cover;
+  display: block;
 }
 
 .hangout-list-title {
@@ -226,6 +231,16 @@
 
 .map-recenter-btn {
   border-radius: 999px;
+  background: #111827 !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+.map-recenter-btn:hover,
+.map-recenter-btn:focus {
+  background: #0b0f1a !important;
+  color: #ffffff !important;
+
 }
 
 .map-left-stack {
@@ -434,10 +449,6 @@
   display: block;
 }
 
-.uc-fab{
-  display: none;
-}
-
 .map-toggle-icon-btn:hover {
   background: #f8f9fa;
 }
@@ -644,6 +655,30 @@
 .hangout-create-btn {
   border-radius: 999px !important;
   padding: 8px 20px !important;
+  background: #111827 !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+.hangout-create-btn:hover,
+.hangout-create-btn:focus {
+  background: #0b0f1a !important;
+  color: #ffffff !important;;
+}
+
+.hangout-join-btn,
+.hangout-route-btn {
+  background: #111827 !important;
+  color: #ffffff !important;
+  border: none;
+}
+
+.hangout-join-btn:hover,
+.hangout-join-btn:focus,
+.hangout-route-btn:hover,
+.hangout-route-btn:focus {
+  background: #0b0f1a !important;
+  color: #ffffff !important;
 }
 
 .attendee-avatar,
@@ -660,9 +695,121 @@
   flex: 0 0 auto;
 }
 
+.attendee-tile {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
+.attendee-tile .attendee-avatar,
+.attendee-tile .attendee-fallback {
+  width: 28px;
+  height: 28px;
+}
+
+.attendee-remove-btn {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(17, 24, 39, 0.45);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  padding: 0;
+}
+
+.attendee-remove-btn img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.attendee-tile.is-removable:hover .attendee-remove-btn,
+.attendee-tile.is-removable:focus-within .attendee-remove-btn {
+  opacity: 1;
+}
+
 .attendee-avatar {
   object-fit: cover;
   background: transparent;
+}
+
+.hangout-request-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hangout-request-row:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.hangout-request-row:focus {
+  outline: 2px solid #111827;
+  outline-offset: 1px;
+}
+
+.hangout-request-row.is-disabled-link {
+  cursor: default;
+}
+
+.hangout-request-avatar-wrap {
+  flex: 0 0 auto;
+}
+
+.hangout-request-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.hangout-request-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e5e7eb;
+  color: #374151;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.hangout-request-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+}
+
+.hangout-request-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.hangout-request-time {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.hangout-request-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
 }
 
 .shared-location-marker {
@@ -756,8 +903,8 @@
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: #0d6efd;
-  box-shadow: 0 0 0 6px rgba(13, 110, 253, 0.15);
+  background: #111827;
+  box-shadow: 0 0 0 6px rgba(17, 24, 39, 0.18);
 }
 
 @media (max-width: 991px) {

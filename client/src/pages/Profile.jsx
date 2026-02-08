@@ -23,6 +23,7 @@ import attendeeIcon from "../assets/icons/profile-icons/attendee.png";
 import checkedIcon from "../assets/icons/profile-icons/checked.png";
 import sparklerIcon from "../assets/icons/profile-icons/sparkler.png";
 import trashIcon from "../assets/icons/profile-icons/trash.png";
+import whiteDropdownIcon from "../assets/icons/white-dropdown.png";
 
 export default function Profile() {
   const { user: viewer, accessToken, setUser } = useAuth();
@@ -41,12 +42,14 @@ export default function Profile() {
   const [showUnfriendConfirm, setShowUnfriendConfirm] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pendingMenuOpen, setPendingMenuOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [friendHover, setFriendHover] = useState(false);
   const [previewAudience, setPreviewAudience] = useState("friends");
   const [reportReason, setReportReason] = useState("spam");
   const [reportNotes, setReportNotes] = useState("");
   const menuRef = useRef(null);
+  const pendingMenuRef = useRef(null);
   const [friendsCount, setFriendsCount] = useState(null);
   const [friendsList, setFriendsList] = useState([]);
   const [hangouts, setHangouts] = useState([]);
@@ -495,6 +498,16 @@ export default function Profile() {
   }, [menuOpen]);
 
   useEffect(() => {
+    if (!pendingMenuOpen) return;
+    const handleClick = (e) => {
+      if (!pendingMenuRef.current || pendingMenuRef.current.contains(e.target)) return;
+      setPendingMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [pendingMenuOpen]);
+
+  useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 2000);
     return () => clearTimeout(t);
@@ -612,6 +625,30 @@ export default function Profile() {
         prev ? { ...prev, relationship: "pending_outgoing" } : prev
       );
       setToast("Friend request sent");
+    } catch {
+      setToast("Unable to update friend status");
+    }
+  };
+
+  const handleAcceptPendingRequest = async () => {
+    if (!accessToken || !profile.id) return;
+    try {
+      await friendsApi.accept(accessToken, profile.id);
+      setProfileUser((prev) => (prev ? { ...prev, relationship: "friends" } : prev));
+      setPendingMenuOpen(false);
+      setToast("Friend request accepted");
+    } catch {
+      setToast("Unable to update friend status");
+    }
+  };
+
+  const handleDeclinePendingRequest = async () => {
+    if (!accessToken || !profile.id) return;
+    try {
+      await friendsApi.reject(accessToken, profile.id);
+      setProfileUser((prev) => (prev ? { ...prev, relationship: "none" } : prev));
+      setPendingMenuOpen(false);
+      setToast("Friend request declined");
     } catch {
       setToast("Unable to update friend status");
     }
@@ -1060,20 +1097,60 @@ export default function Profile() {
                 </button>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    className="btn btn-dark w-100"
-                    onClick={handleFriendAction}
-                    disabled={friendAction.disabled}
-                    onMouseEnter={() => {
-                      if (friendStatus === "friends") setFriendHover(true);
-                    }}
-                    onMouseLeave={() => setFriendHover(false)}
-                  >
-                    {friendStatus === "friends" && friendHover
-                      ? "Unfriend"
-                      : friendAction.label}
-                  </button>
+                  {friendStatus === "pending_in" ? (
+                    <div className="profile-pending-wrap w-100" ref={pendingMenuRef}>
+                      <button
+                        type="button"
+                        className="btn btn-dark w-100 profile-pending-btn"
+                        onClick={() => setPendingMenuOpen((v) => !v)}
+                        aria-haspopup="menu"
+                        aria-expanded={pendingMenuOpen}
+                      >
+                        <span>Pending</span>
+                        <img
+                          src={whiteDropdownIcon}
+                          alt=""
+                          aria-hidden="true"
+                          className="profile-pending-caret"
+                        />
+                      </button>
+                      {pendingMenuOpen && (
+                        <div className="profile-pending-dropdown" role="menu">
+                          <button
+                            type="button"
+                            className="profile-pending-item"
+                            role="menuitem"
+                            onClick={handleAcceptPendingRequest}
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            className="profile-pending-item"
+                            role="menuitem"
+                            onClick={handleDeclinePendingRequest}
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-dark w-100"
+                      onClick={handleFriendAction}
+                      disabled={friendAction.disabled}
+                      onMouseEnter={() => {
+                        if (friendStatus === "friends") setFriendHover(true);
+                      }}
+                      onMouseLeave={() => setFriendHover(false)}
+                    >
+                      {friendStatus === "friends" && friendHover
+                        ? "Unfriend"
+                        : friendAction.label}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn btn-outline-secondary w-100"
@@ -1451,7 +1528,9 @@ export default function Profile() {
                 {!isOwnerView && interestsHidden ? (
                   <div className="text-muted">This information is private.</div>
                 ) : isProfileFieldEmpty(profile.interests) ? (
-                  <div className="profile-empty">Add your interests</div>
+                  <div className="profile-empty">
+                    {isOwnerView ? "Add your interests" : "No interests added yet."}
+                  </div>
                 ) : (
                   <div className="profile-tags">
                     {profile.interests.map((interest) => (
@@ -1547,7 +1626,7 @@ export default function Profile() {
                       {isProfileFieldEmpty(profile.about)
                         ? isOwnerView
                           ? "Tell people a little about yourself"
-                          : ""
+                          : "No about info yet."
                         : profile.about}
                     </p>
                   </div>

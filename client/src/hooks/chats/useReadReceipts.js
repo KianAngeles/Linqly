@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { chatsApi } from "../../api/chats.api";
 import { socket } from "../../socket";
 import { getMessageTimestamp } from "../../utils/chats/messages";
+import { addActiveChat, markChatRead, removeActiveChat } from "../../store/chatsStore";
 
 const readStore = {
   readByChat: {},
@@ -160,6 +161,13 @@ export default function useReadReceipts({
   }, [accessToken, chatId]);
 
   useEffect(() => {
+    if (!chatId || !enabled) return;
+    if (!isActive) return;
+    addActiveChat(chatId);
+    return () => removeActiveChat(chatId);
+  }, [chatId, enabled, isActive]);
+
+  useEffect(() => {
     if (!chatId || !enabled || !isActive) return;
     if (!isAtBottom) return;
     if (document.visibilityState === "hidden") return;
@@ -168,7 +176,9 @@ export default function useReadReceipts({
     if (!lastId) return;
     const chatKey = String(chatId);
     if (lastReadEmitRef.current[chatKey] === lastId) return;
+    const readAt = new Date().toISOString();
     socket.emit("chat:read", { chatId, lastReadMessageId: lastId });
+    markChatRead(chatId, readAt, lastId);
     lastReadEmitRef.current[chatKey] = lastId;
   }, [chatId, enabled, isActive, isAtBottom, messages]);
 

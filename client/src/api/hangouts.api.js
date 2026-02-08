@@ -1,4 +1,14 @@
-const API = import.meta.env.VITE_API_URL;
+const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+async function parseJsonSafe(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: response.ok ? "" : "Request failed" };
+  }
+}
 
 export const hangoutsApi = {
   async mine(accessToken) {
@@ -6,7 +16,7 @@ export const hangoutsApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to load hangouts");
     return data;
   },
@@ -20,7 +30,7 @@ export const hangoutsApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to load hangouts");
     return data;
   },
@@ -35,7 +45,7 @@ export const hangoutsApi = {
       credentials: "include",
       body: JSON.stringify(body),
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to create hangout");
     return data;
   },
@@ -45,7 +55,7 @@ export const hangoutsApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to load hangout");
     return data;
   },
@@ -56,8 +66,30 @@ export const hangoutsApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to join hangout");
+    return data;
+  },
+
+  async acceptJoinRequest(accessToken, hangoutId, userId) {
+    const r = await fetch(`${API}/hangouts/${hangoutId}/join-requests/${userId}/accept`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "include",
+    });
+    const data = await parseJsonSafe(r);
+    if (!r.ok) throw new Error(data.message || "Failed to accept join request");
+    return data;
+  },
+
+  async declineJoinRequest(accessToken, hangoutId, userId) {
+    const r = await fetch(`${API}/hangouts/${hangoutId}/join-requests/${userId}/decline`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "include",
+    });
+    const data = await parseJsonSafe(r);
+    if (!r.ok) throw new Error(data.message || "Failed to decline join request");
     return data;
   },
 
@@ -67,8 +99,23 @@ export const hangoutsApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to leave hangout");
+    return data;
+  },
+
+  async removeAttendee(accessToken, hangoutId, userId) {
+    const r = await fetch(`${API}/hangouts/${hangoutId}/remove-attendee`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      credentials: "include",
+      body: JSON.stringify({ userId }),
+    });
+    const data = await parseJsonSafe(r);
+    if (!r.ok) throw new Error(data.message || "Failed to remove attendee");
     return data;
   },
 
@@ -78,7 +125,7 @@ export const hangoutsApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to delete hangout");
     return data;
   },
@@ -93,7 +140,7 @@ export const hangoutsApi = {
       credentials: "include",
       body: JSON.stringify(body),
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to update hangout");
     return data;
   },
@@ -108,7 +155,7 @@ export const hangoutsApi = {
       credentials: "include",
       body: JSON.stringify({ lng, lat }),
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to share location");
     return data;
   },
@@ -119,7 +166,7 @@ export const hangoutsApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to stop sharing");
     return data;
   },
@@ -134,7 +181,7 @@ export const hangoutsApi = {
       credentials: "include",
       body: JSON.stringify({ note }),
     });
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to update note");
     return data;
   },

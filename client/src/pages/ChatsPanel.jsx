@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../store/AuthContext";
 import { useCall } from "../store/CallContext";
@@ -6,6 +6,7 @@ import { socket } from "../socket";
 import useChatSocketEvents from "../hooks/chats/useChatSocketEvents";
 import { chatsApi } from "../api/chats.api";
 import { messagesApi } from "../api/messages.api";
+import { messageRequestsApi } from "../api/messageRequests.api";
 import { usersApi } from "../api/users.api";
 import { friendsApi } from "../api/friends.api";
 import useChatsData from "../hooks/chats/useChatsData";
@@ -20,6 +21,7 @@ import { REACTION_EMOJIS, getMessageTimestamp, renderMessageText } from "../util
 import { getDirectPeer, getDisplayName, getUserId, getUserName } from "../utils/chats/users";
 import { resolveAttachmentUrl } from "../utils/chats/urls";
 import useReadReceipts, { resolveSeenByMessage } from "../hooks/chats/useReadReceipts";
+import { GROUP_CALLS_ENABLED } from "../constants/featureFlags";
 
 import ChatsSidebar from "../components/chats/ChatsSidebar";
 import ChatRoom from "../components/chats/ChatRoom";
@@ -36,6 +38,7 @@ import FindMessageOverlay from "../components/chats/room/FindMessageOverlay";
 import SharedOverlay from "../components/chats/room/SharedOverlay";
 import GroupNameModal from "../components/chats/room/GroupNameModal";
 import NicknamesModal from "../components/chats/room/NicknamesModal";
+import GroupCallHeaderBanner from "../components/calls/GroupCallHeaderBanner";
 import EmojiPicker from "emoji-picker-react";
 
 import "./ChatsPanel.css";
@@ -52,6 +55,7 @@ import darkMakeAdminIcon from "../assets/icons/chat-settings-icons/dark-make-adm
 import darkRemoveIcon from "../assets/icons/chat-settings-icons/dark-remove.png";
 import darkAddMemberIcon from "../assets/icons/chat-settings-icons/dark-add-member.png";
 import darkImageIcon from "../assets/icons/chat-settings-icons/dark-image.png";
+import profileIcon from "../assets/icons/chat-settings-icons/profile.png";
 import imageIcon from "../assets/icons/image.png";
 import micIcon from "../assets/icons/mic.png";
 import sendIcon from "../assets/icons/send.png";
@@ -64,7 +68,7 @@ const INDEFINITE_MUTE_MS = 1000 * 60 * 60 * 24 * 365 * 10;
 
 export default function ChatsPanel() {
   const { accessToken, user, refreshChatSettings } = useAuth();
-  const { startCall, isInCall } = useCall();
+  const { startCall, startGroupCall, joinGroupCall, isInCall } = useCall();
   const navigate = useNavigate();
   const { chatId: routeChatId } = useParams();
 
@@ -75,6 +79,8 @@ export default function ChatsPanel() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [err, setErr] = useState("");
+  const [messageRequests, setMessageRequests] = useState([]);
+  const [requestActionBusy, setRequestActionBusy] = useState(false);
   const [friends, setFriends] = useState([]);
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [groupName, setGroupName] = useState("");
@@ -93,6 +99,7 @@ export default function ChatsPanel() {
   const [nicknameDraft, setNicknameDraft] = useState("");
   const [showFindMessage, setShowFindMessage] = useState(false);
   const [callDebug, setCallDebug] = useState("");
+  const [ongoingGroupCallState, setOngoingGroupCallState] = useState(null);
   const [emptyDirectPeerProfile, setEmptyDirectPeerProfile] = useState(null);
   const [showEmojiModal, setShowEmojiModal] = useState(false);
   const [defaultSendEmoji, setDefaultSendEmoji] = useState("👍");
@@ -160,14 +167,23 @@ export default function ChatsPanel() {
   const prevChatIdRef = useRef("");
 
   const chatRoomRef = useRef(null);
+  const isSelectedMessageRequest = useMemo(
+    () =>
+      (messageRequests || []).some(
+        (request) => String(request.chatId || "") === String(selectedChatId || "")
+      ),
+    [messageRequests, selectedChatId]
+  );
 
-  const { chats, setChats, loadChats, togglePin, deleteChat } =
+  const { chats, setChats, loadChats, togglePin, deleteChat, markChatRead } =
     useChatsData({
       accessToken,
       routeChatId,
       selectedChatId,
       setSelectedChatId,
       navigate,
+      keepSelectedWhenMissing: isSelectedMessageRequest || Boolean(routeChatId),
+      userId: user?.id,
     });
 
   // Derived
@@ -175,6 +191,19 @@ export default function ChatsPanel() {
     () => chats.find((c) => String(c._id) === String(selectedChatId)),
     [chats, selectedChatId]
   );
+  const selectedIncomingRequest = useMemo(
+    () =>
+      (messageRequests || []).find(
+        (request) => String(request.chatId || "") === String(selectedChatId || "")
+      ) || null,
+    [messageRequests, selectedChatId]
+  );
+  const isIncomingRequestThread = Boolean(selectedIncomingRequest);
+  const selectedRequestStatus = String(selectedChat?.requestStatus || "accepted");
+  const isPendingOutgoingRequest = selectedRequestStatus === "pending_outgoing";
+  const isDeclinedOutgoingRequest = selectedRequestStatus === "declined_outgoing";
+  const isRequestLockedThread =
+    isIncomingRequestThread || isPendingOutgoingRequest || isDeclinedOutgoingRequest;
   const {
     chatSettings,
     setChatSettings,
@@ -236,7 +265,7 @@ export default function ChatsPanel() {
   const isHangoutChat = selectedChat?.type === "hangout";
   const isGroupChat = selectedChat?.type === "group" || isHangoutChat;
   const directPeer = useMemo(
-    () => getDirectPeer(selectedChat, user?.id),
+    () => getDirectPeer(selectedChat, user?.id) || selectedChat?.otherUser || null,
     [selectedChat, user?.id]
   );
   const directPeerId = getUserId(directPeer);
@@ -248,6 +277,17 @@ export default function ChatsPanel() {
       (a) => String(a.id) === String(user.id)
     );
   }, [groupSettings, user?.id]);
+  const selectedOngoingGroupCall = useMemo(() => {
+    if (!GROUP_CALLS_ENABLED || !isGroupChat) return null;
+    if (ongoingGroupCallState?.callId) return ongoingGroupCallState;
+    if (!selectedChat?.ongoingCall?.callId) return null;
+    return {
+      ...selectedChat.ongoingCall,
+      participants: [],
+      joinedUserIds: selectedChat.ongoingCall.participantUserIds || [],
+      currentUserId: String(user?.id || ""),
+    };
+  }, [isGroupChat, ongoingGroupCallState, selectedChat?.ongoingCall, user?.id]);
   const blockStatus = selectedChat?.blockStatus || null;
   const blockedByMe = Boolean(isDirectChat && blockStatus?.blockedByMe);
   const blockedByOther = Boolean(isDirectChat && blockStatus?.blockedByOther);
@@ -327,6 +367,67 @@ export default function ChatsPanel() {
     pendingImageUrlsRef,
     pendingTextQueueRef,
   });
+
+  useEffect(() => {
+    if (!GROUP_CALLS_ENABLED || !accessToken || !selectedChatId || !isGroupChat) {
+      setOngoingGroupCallState(null);
+      return;
+    }
+    let cancelled = false;
+    chatsApi
+      .getOngoingCallState(accessToken, selectedChatId)
+      .then((data) => {
+        if (cancelled) return;
+        const ongoing = data?.ongoingCall || null;
+        if (!ongoing?.callId) {
+          setOngoingGroupCallState(null);
+          return;
+        }
+        setOngoingGroupCallState({
+          ...ongoing,
+          participants: [],
+          joinedUserIds: ongoing.participantUserIds || [],
+          currentUserId: String(user?.id || ""),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setOngoingGroupCallState(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, isGroupChat, selectedChatId, user?.id]);
+
+  useEffect(() => {
+    if (!GROUP_CALLS_ENABLED) return;
+    const onStarted = (payload) => {
+      if (String(payload?.chatId || "") !== String(selectedChatId || "")) return;
+      setOngoingGroupCallState({
+        callId: payload?.callId || "",
+        callType: payload?.callType || "audio",
+        startedByUserId: payload?.startedByUserId || "",
+        startedByName: payload?.startedByName || "Unknown",
+        startedAt: payload?.startedAt || new Date().toISOString(),
+        participantCount: payload?.participantCount || 0,
+        participants: payload?.participants || [],
+        joinedUserIds: (payload?.participants || []).map((p) => String(p.userId || "")),
+        currentUserId: String(user?.id || ""),
+      });
+    };
+    const onUpdated = (payload) => onStarted(payload);
+    const onEnded = (payload) => {
+      if (String(payload?.chatId || "") !== String(selectedChatId || "")) return;
+      setOngoingGroupCallState(null);
+    };
+    socket.on("group_call:started", onStarted);
+    socket.on("group_call:updated", onUpdated);
+    socket.on("group_call:ended", onEnded);
+    return () => {
+      socket.off("group_call:started", onStarted);
+      socket.off("group_call:updated", onUpdated);
+      socket.off("group_call:ended", onEnded);
+    };
+  }, [selectedChatId, user?.id]);
 
   useEffect(() => {
     const onReadUpdate = (payload) => {
@@ -498,6 +599,27 @@ export default function ChatsPanel() {
           </button>
           <div className="chat-settings-action-label">Search</div>
         </div>
+        {!isGroupChat && (
+          <div className="chat-settings-action-item">
+            <button
+              type="button"
+              className="chat-settings-find-btn"
+              onClick={() => {
+                const username = String(
+                  selectedChat?.otherUser?.username || directPeer?.username || ""
+                )
+                  .replace(/^@+/, "")
+                  .trim();
+                if (!username) return;
+                navigate(`/app/profile/${encodeURIComponent(username)}`);
+              }}
+              title="Profile"
+            >
+              <img src={profileIcon} alt="Profile" />
+            </button>
+            <div className="chat-settings-action-label">Profile</div>
+          </div>
+        )}
         <div className="chat-settings-action-item">
           <button
             type="button"
@@ -913,6 +1035,52 @@ export default function ChatsPanel() {
             </div>
           </div>
         )}
+        {GROUP_CALLS_ENABLED && isGroupChat && groupSettings && (
+          <div className="form-check form-switch mt-2">
+            <input
+              className="form-check-input"
+              type="checkbox"
+              id="group-allow-anyone-call"
+              checked={groupSettings.allowAnyoneCall !== false}
+              disabled={!isGroupAdmin}
+              onChange={(e) => {
+                const nextValue = e.target.checked;
+                setErr("");
+                chatsApi
+                  .updateGroup(accessToken, selectedChatId, {
+                    allowAnyoneCall: nextValue,
+                  })
+                  .then(() => {
+                    setGroupSettings((prev) =>
+                      prev ? { ...prev, allowAnyoneCall: nextValue } : prev
+                    );
+                    setChats((prev) =>
+                      prev.map((chat) => {
+                        if (String(chat._id) !== String(selectedChatId)) return chat;
+                        const isAdmin =
+                          String(groupSettings.creator?.id || "") === String(user?.id || "") ||
+                          (groupSettings.admins || []).some(
+                            (admin) => String(admin.id) === String(user?.id || "")
+                          );
+                        return {
+                          ...chat,
+                          allowAnyoneCall: nextValue,
+                          messagingCaps: {
+                            ...(chat.messagingCaps || {}),
+                            calls: nextValue || isAdmin,
+                          },
+                        };
+                      })
+                    );
+                  })
+                  .catch((error) => setErr(error.message));
+              }}
+            />
+            <label className="form-check-label" htmlFor="group-allow-anyone-call">
+              Allow anyone can call
+            </label>
+          </div>
+        )}
       </AccordionSection>
 
       {!isGroupChat && (
@@ -1270,6 +1438,23 @@ export default function ChatsPanel() {
   }, [routeChatId]);
 
   useEffect(() => {
+    if (!selectedChatId) return;
+    const chat = chats.find((c) => String(c._id) === String(selectedChatId));
+    if (!chat) return;
+    const lastMessageAt = chat.lastMessageAt ? new Date(chat.lastMessageAt).getTime() : 0;
+    const lastReadAt = chat.lastReadAt ? new Date(chat.lastReadAt).getTime() : 0;
+    const lastSenderId = chat.lastMessageSenderId ? String(chat.lastMessageSenderId) : "";
+    const isUnread =
+      lastMessageAt > lastReadAt && (!user?.id || lastSenderId !== String(user.id));
+    if (!isUnread) return;
+    markChatRead(
+      selectedChatId,
+      chat.lastMessageAt || new Date().toISOString(),
+      chat.lastReadMessageId
+    );
+  }, [chats, markChatRead, selectedChatId, user?.id]);
+
+  useEffect(() => {
     setReplyingTo(null);
     setReactOpenFor(null);
     setMoreOpenFor(null);
@@ -1347,6 +1532,43 @@ export default function ChatsPanel() {
     return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, [showMuteMenu]);
 
+  const loadMessageRequests = useCallback(async () => {
+    if (!accessToken) {
+      setMessageRequests([]);
+      return;
+    }
+    try {
+      const data = await messageRequestsApi.list(accessToken, 30);
+      setMessageRequests(Array.isArray(data?.requests) ? data.requests : []);
+    } catch {
+      setMessageRequests([]);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    loadMessageRequests();
+  }, [loadMessageRequests]);
+
+  useEffect(() => {
+    if (!accessToken) return undefined;
+    const refreshRequests = () => {
+      loadMessageRequests();
+      loadChats().catch(() => {});
+    };
+
+    socket.on("message_request:new", refreshRequests);
+    socket.on("message_request:accepted", refreshRequests);
+    socket.on("message_request:declined", refreshRequests);
+    socket.on("chat:activated", refreshRequests);
+
+    return () => {
+      socket.off("message_request:new", refreshRequests);
+      socket.off("message_request:accepted", refreshRequests);
+      socket.off("message_request:declined", refreshRequests);
+      socket.off("chat:activated", refreshRequests);
+    };
+  }, [accessToken, loadChats, loadMessageRequests]);
+
   async function onSearch(e) {
     e.preventDefault();
     setErr("");
@@ -1370,6 +1592,49 @@ export default function ChatsPanel() {
       setQuery("");
     } catch (e) {
       setErr(e.message);
+    }
+  }
+
+  function handleSelectRequest(request) {
+    const nextId = String(request?.chatId || "");
+    if (!nextId) return;
+    setSelectedChatId(nextId);
+    navigate(`/app/chats/${nextId}`);
+  }
+
+  async function handleAcceptMessageRequest() {
+    if (!selectedIncomingRequest?.id || !accessToken || requestActionBusy) return;
+    setRequestActionBusy(true);
+    setErr("");
+    try {
+      const data = await messageRequestsApi.accept(accessToken, selectedIncomingRequest.id);
+      const nextChatId = String(data?.chatId || selectedIncomingRequest.chatId || "");
+      await Promise.all([loadChats(), loadMessageRequests()]);
+      if (nextChatId) {
+        setSelectedChatId(nextChatId);
+        navigate(`/app/chats/${nextChatId}`);
+      }
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setRequestActionBusy(false);
+    }
+  }
+
+  async function handleDeclineMessageRequest() {
+    if (!selectedIncomingRequest?.id || !accessToken || requestActionBusy) return;
+    setRequestActionBusy(true);
+    setErr("");
+    try {
+      await messageRequestsApi.decline(accessToken, selectedIncomingRequest.id);
+      await loadMessageRequests();
+      setSelectedChatId("");
+      setMessages([]);
+      navigate("/app/chats");
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setRequestActionBusy(false);
     }
   }
 
@@ -1528,6 +1793,14 @@ export default function ChatsPanel() {
     const nextId = String(id);
     setSelectedChatId(nextId);
     navigate(`/app/chats/${nextId}`);
+    const chat = chats.find((c) => String(c._id) === nextId);
+    if (chat) {
+      markChatRead(
+        nextId,
+        chat.lastMessageAt || chat.updatedAt || new Date().toISOString(),
+        chat.lastReadMessageId
+      );
+    }
   }
 
   function handleToggleAddMembers() {
@@ -1573,7 +1846,10 @@ export default function ChatsPanel() {
     setTimeout(() => setShowMentions(false), 100);
   }
 
-  const typingEnabled = chatSettings?.typingIndicators !== false;
+  const typingEnabled =
+    !isRequestLockedThread &&
+    selectedChat?.messagingCaps?.typing !== false &&
+    chatSettings?.typingIndicators !== false;
 
   function emitTypingStopFor(chatId) {
     if (!chatId || !typingEnabled) return;
@@ -1708,7 +1984,10 @@ export default function ChatsPanel() {
   const visibleMessages = messages.filter(
     (m) => !hiddenMessageIds.has(String(m.id || m._id))
   );
-  const readReceiptsEnabled = chatSettings?.readReceipts !== false;
+  const readReceiptsEnabled =
+    !isRequestLockedThread &&
+    selectedChat?.messagingCaps?.readReceipts !== false &&
+    chatSettings?.readReceipts !== false;
   const { readMapForChat } = useReadReceipts({
     accessToken,
     chatId: selectedChatId,
@@ -1930,19 +2209,25 @@ export default function ChatsPanel() {
       </div>
     );
   }
+  const requestPeer = selectedIncomingRequest?.fromUser || null;
+  const requestPeerName = String(requestPeer?.username || "").trim();
+  const requestPeerAvatar = resolveAvatarUrl(requestPeer?.avatarUrl || "");
   const headerTitle = selectedChat
     ? isGroupChat
       ? selectedChat?.name || "Group chat"
       : getDisplayName(directPeer, nicknamesMap)
-    : "Chat";
-  const directPeerName = getDisplayName(directPeer, nicknamesMap);
+    : requestPeerName || "Message request";
+  const directPeerName = selectedChat
+    ? getDisplayName(directPeer, nicknamesMap)
+    : requestPeerName;
   const directPeerAvatar =
-    directPeer?.avatarUrl &&
-    (directPeer.avatarUrl.startsWith("http://") ||
-    directPeer.avatarUrl.startsWith("https://")
-      ? directPeer.avatarUrl
-      : `${API_BASE}${directPeer.avatarUrl}`);
-  const directPeerOnline = Boolean(selectedChat?.otherUser?.isOnline);
+    selectedChat && (directPeer?.avatarUrl || selectedChat?.otherUser?.avatarUrl)
+      ? (directPeer?.avatarUrl || selectedChat?.otherUser?.avatarUrl).startsWith("http://") ||
+        (directPeer?.avatarUrl || selectedChat?.otherUser?.avatarUrl).startsWith("https://")
+        ? (directPeer?.avatarUrl || selectedChat?.otherUser?.avatarUrl)
+        : `${API_BASE}${directPeer?.avatarUrl || selectedChat?.otherUser?.avatarUrl}`
+      : requestPeerAvatar;
+  const directPeerOnline = Boolean(selectedChat?.otherUser?.isOnline && !isRequestLockedThread);
   const groupAvatar = selectedChat?.avatarUrl
     ? selectedChat.avatarUrl.startsWith("http://") ||
       selectedChat.avatarUrl.startsWith("https://")
@@ -1985,6 +2270,12 @@ export default function ChatsPanel() {
     emptyIntroMutualCount > 0
       ? `${emptyIntroMutualCount} mutual friends`
       : "No mutual friends";
+  const emptyIntroAvatarUrl = resolveAvatarUrl(
+    emptyDirectPeerProfile?.avatarUrl ||
+      directPeer?.avatarUrl ||
+      selectedChat?.otherUser?.avatarUrl ||
+      ""
+  );
   const emptyIntroProvince =
     typeof emptyDirectPeerProfile?.location === "string"
       ? String(emptyDirectPeerProfile.location).trim()
@@ -2000,9 +2291,42 @@ export default function ChatsPanel() {
     (emptyIntroLocationPrivacy === "friends" && emptyIntroIsFriend)
   );
 
-  const handleStartCall = () => {
-    if (!isDirectChat || !directPeerId || !selectedChatId) {
-      setCallDebug("Call unavailable: select a direct chat first.");
+  const handleJoinGroupCall = useCallback(
+    async (callIdOverride = "") => {
+      if (!GROUP_CALLS_ENABLED) {
+        setCallDebug("Group calls are disabled.");
+        setTimeout(() => setCallDebug(""), 3000);
+        return;
+      }
+      if (!selectedChatId) return;
+      const joinRes = await joinGroupCall({
+        chatId: selectedChatId,
+        callId: callIdOverride || selectedOngoingGroupCall?.callId || "",
+        chatName: selectedChat?.displayName || selectedChat?.name || "",
+        startedByName:
+          selectedOngoingGroupCall?.startedByName ||
+          selectedChat?.ongoingCall?.startedByName ||
+          "",
+      });
+      if (!joinRes?.ok) {
+        setCallDebug(joinRes?.message || "Failed to join group call.");
+        setTimeout(() => setCallDebug(""), 3000);
+      }
+    },
+    [
+      joinGroupCall,
+      selectedChat?.displayName,
+      selectedChat?.name,
+      selectedChat?.ongoingCall?.startedByName,
+      selectedChatId,
+      selectedOngoingGroupCall?.callId,
+      selectedOngoingGroupCall?.startedByName,
+    ]
+  );
+
+  const handleStartCall = useCallback(async () => {
+    if (!selectedChatId) {
+      setCallDebug("Select a chat first.");
       setTimeout(() => setCallDebug(""), 2000);
       return;
     }
@@ -2011,19 +2335,58 @@ export default function ChatsPanel() {
       setTimeout(() => setCallDebug(""), 2000);
       return;
     }
-    console.log("call button pressed", { userId: user?.id, user });
     if (!socket.connected) {
       setCallDebug("Socket not connected. Try refreshing.");
       setTimeout(() => setCallDebug(""), 3000);
       return;
     }
+
+    if (isGroupChat) {
+      if (!GROUP_CALLS_ENABLED) {
+        setCallDebug("Group calls are disabled.");
+        setTimeout(() => setCallDebug(""), 3000);
+        return;
+      }
+      if (selectedChat?.messagingCaps?.calls === false) {
+        setCallDebug("Only admins can start calls in this chat.");
+        setTimeout(() => setCallDebug(""), 2500);
+        return;
+      }
+      if (selectedOngoingGroupCall?.callId) {
+        await handleJoinGroupCall(selectedOngoingGroupCall.callId);
+        return;
+      }
+      const result = await startGroupCall({
+        chatId: selectedChatId,
+        callType: "audio",
+      });
+      if (!result?.ok) {
+        setCallDebug(result?.message || "Failed to start group call.");
+        setTimeout(() => setCallDebug(""), 3000);
+      }
+      return;
+    }
+
+    if (!isDirectChat || !directPeerId) {
+      setCallDebug("Call unavailable: select a direct chat first.");
+      setTimeout(() => setCallDebug(""), 2000);
+      return;
+    }
+
     const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     const url = `${window.location.origin}/call?callId=${encodeURIComponent(
       callId
     )}&chatId=${encodeURIComponent(selectedChatId)}&peerId=${encodeURIComponent(
       directPeerId
     )}&role=caller`;
-    const callWindow = window.open(url, "_blank", "popup=yes");
+    const callWindow = window.open(url, "_blank", "popup=yes,width=980,height=720");
+    if (callWindow) {
+      try {
+        callWindow.opener = null;
+      } catch {
+        // ignore
+      }
+    }
     if (!callWindow) {
       setCallDebug("Pop-up blocked. Allow popups for this site to start a call.");
       setTimeout(() => setCallDebug(""), 3000);
@@ -2044,7 +2407,22 @@ export default function ChatsPanel() {
           }
         : null,
     });
-  };
+  }, [
+    directPeerAvatar,
+    directPeerId,
+    directPeerName,
+    handleJoinGroupCall,
+    isDirectChat,
+    isGroupChat,
+    isInCall,
+    selectedChat?.messagingCaps?.calls,
+    selectedChatId,
+    selectedOngoingGroupCall?.callId,
+    socket.connected,
+    startCall,
+    startGroupCall,
+    user,
+  ]);
 
 
   const messageItems = visibleMessages.map((m, idx) => {
@@ -2288,6 +2666,31 @@ export default function ChatsPanel() {
             url: msg.imageUrl,
           });
         }}
+        onCallBack={() => {
+          if (!isDirectChat || !directPeerId || !selectedChatId) return;
+          handleStartCall();
+        }}
+        ongoingGroupCallState={
+          GROUP_CALLS_ENABLED && selectedOngoingGroupCall
+            ? {
+                ...selectedOngoingGroupCall,
+                currentUserId: String(user?.id || ""),
+                joinedUserIds:
+                  selectedOngoingGroupCall.joinedUserIds ||
+                  (selectedOngoingGroupCall.participants || []).map((p) =>
+                    String(p.userId || "")
+                  ),
+              }
+            : null
+        }
+        onJoinGroupCall={
+          GROUP_CALLS_ENABLED
+            ? () => {
+                if (!isGroupChat) return;
+                handleJoinGroupCall(m.meta?.callId || "");
+              }
+            : null
+        }
       />
     </div>
   );
@@ -2321,8 +2724,10 @@ export default function ChatsPanel() {
           groupMembers={groupMembers}
           onToggleGroupMember={toggleGroupMember}
           chats={chats}
+          messageRequests={messageRequests}
           selectedChatId={selectedChatId}
           onSelectChat={handleSelectChat}
+          onSelectRequest={handleSelectRequest}
           API_BASE={API_BASE}
           muteIcon={muteIcon}
           pinnedIcon={pinnedIcon}
@@ -2345,11 +2750,33 @@ export default function ChatsPanel() {
             <ChatHeader
               username={user?.username}
               title={headerTitle}
-              avatarUrl={isDirectChat ? directPeerAvatar : groupAvatar}
+              avatarUrl={
+                isIncomingRequestThread
+                  ? directPeerAvatar
+                  : isDirectChat
+                    ? directPeerAvatar
+                    : groupAvatar
+              }
+              isOnline={isDirectChat ? directPeerOnline : false}
               isMuted={isMuted}
-              showCallButton={isDirectChat}
+              showCallButton={
+                Boolean(selectedChatId) &&
+                !isIncomingRequestThread &&
+                (isDirectChat || (GROUP_CALLS_ENABLED && isGroupChat)) &&
+                selectedChat?.messagingCaps?.calls !== false
+              }
               disableCallButton={isInCall}
               onCall={handleStartCall}
+              groupCallBanner={
+                GROUP_CALLS_ENABLED && isGroupChat && selectedOngoingGroupCall?.callId ? (
+                  <GroupCallHeaderBanner
+                    startedByName={selectedOngoingGroupCall.startedByName || "Unknown"}
+                    participantCount={selectedOngoingGroupCall.participantCount || 0}
+                    onJoin={() => handleJoinGroupCall(selectedOngoingGroupCall.callId)}
+                    canJoin
+                  />
+                ) : null
+              }
             />
           }
           topContent={
@@ -2367,11 +2794,19 @@ export default function ChatsPanel() {
           messageList={
             showDirectChatEmptyState ? (
               <div className="chat-empty-intro">
-                <div className="chat-empty-intro-avatar chat-empty-intro-avatar-fallback">
-                  {String(emptyIntroUsername || emptyIntroDisplayName || "?")
-                    .charAt(0)
-                    .toUpperCase()}
-                </div>
+                {emptyIntroAvatarUrl ? (
+                  <img
+                    src={emptyIntroAvatarUrl}
+                    alt={emptyIntroDisplayName}
+                    className="chat-empty-intro-avatar"
+                  />
+                ) : (
+                  <div className="chat-empty-intro-avatar chat-empty-intro-avatar-fallback">
+                    {String(emptyIntroUsername || emptyIntroDisplayName || "?")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </div>
+                )}
                 <div className="chat-empty-intro-name">{emptyIntroDisplayName}</div>
                 <div className="chat-empty-intro-handle">
                   @{emptyIntroUsername || "user"}
@@ -2422,21 +2857,58 @@ export default function ChatsPanel() {
             ) : null
           }
           composerTopContent={
-            blockedByOther ? (
-              <div className="alert alert-danger py-2 chat-blocked-banner">
-                <span className="chat-blocked-icon" aria-hidden="true">
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="16"
-                    height="16"
-                    fill="currentColor"
-                  >
-                    <path d="M17 8h-1V6a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V6Zm7 12H7v-8h10v8Z" />
-                  </svg>
-                </span>
-                You've been blocked by this user.
-              </div>
-            ) : null
+            <>
+              {isIncomingRequestThread ? (
+                <div className="chat-request-actions-bar">
+                  <div className="chat-request-actions-label">
+                    Message request from @{requestPeerName || "user"}
+                  </div>
+                  <div className="chat-request-actions-buttons">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-dark"
+                      onClick={handleAcceptMessageRequest}
+                      disabled={requestActionBusy}
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      onClick={handleDeclineMessageRequest}
+                      disabled={requestActionBusy}
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {isPendingOutgoingRequest ? (
+                <div className="alert alert-info py-2 chat-request-status-banner">
+                  Message request sent. You can send more after it is accepted.
+                </div>
+              ) : null}
+              {isDeclinedOutgoingRequest ? (
+                <div className="alert alert-secondary py-2 chat-request-status-banner">
+                  Your message request was declined.
+                </div>
+              ) : null}
+              {blockedByOther ? (
+                <div className="alert alert-danger py-2 chat-blocked-banner">
+                  <span className="chat-blocked-icon" aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="16"
+                      height="16"
+                      fill="currentColor"
+                    >
+                      <path d="M17 8h-1V6a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V6Zm7 12H7v-8h10v8Z" />
+                    </svg>
+                  </span>
+                  You've been blocked by this user.
+                </div>
+              ) : null}
+            </>
           }
           composer={
             <MessageComposer
@@ -2459,7 +2931,7 @@ export default function ChatsPanel() {
               onSendImage={sendImage}
               onSendVoice={sendVoice}
               defaultSendEmoji={defaultSendEmoji}
-              disabled={isBlocked}
+              disabled={isBlocked || isRequestLockedThread}
             />
           }
         />
@@ -2471,6 +2943,11 @@ export default function ChatsPanel() {
           {!selectedChatId && (
             <div className="text-muted small">
               Select a chat to manage members and settings.
+            </div>
+          )}
+          {isIncomingRequestThread && (
+            <div className="text-muted small">
+              Review this message request in the chat panel and accept or decline it.
             </div>
           )}
           <FindMessageOverlay
@@ -2501,7 +2978,7 @@ export default function ChatsPanel() {
               setMediaViewer({ type: "image", url });
             }}
           />
-          {selectedChatId && !isGroupChat && (
+          {selectedChatId && !isGroupChat && !isIncomingRequestThread && (
             <div className="d-flex flex-column gap-0">
               <div className="chat-settings-header">
                 <div className="chat-settings-avatar-wrap">
@@ -2526,7 +3003,7 @@ export default function ChatsPanel() {
               {settingsSections}
             </div>
           )}
-          {selectedChatId && isGroupChat && groupSettings && (
+          {selectedChatId && selectedChat && isGroupChat && groupSettings && (
             <div className="d-flex flex-column gap-3 chat-settings-group-stack">
               <GroupSettingsPanel
                 groupSettings={groupSettings}

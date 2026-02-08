@@ -8,6 +8,8 @@ const path = require("path");
 const authRoutes = require("./routes/auth.routes");
 const usersRoutes = require("./routes/users.routes");
 const friendsRoutes = require("./routes/friends.routes");
+const notificationsRoutes = require("./routes/notifications.routes");
+const messageRequestsRoutes = require("./routes/messageRequests.routes");
 
 const chatsRoutes = require("./routes/chats.routes");
 const messagesRoutes = require("./routes/messages.routes");
@@ -69,6 +71,8 @@ app.use(
 app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);
 app.use("/friends", friendsRoutes);
+app.use("/notifications", notificationsRoutes);
+app.use("/message-requests", messageRequestsRoutes);
 app.use("/chats", chatsRoutes);
 app.use("/messages", messagesRoutes);
 app.use("/hangouts", hangoutsRoutes);

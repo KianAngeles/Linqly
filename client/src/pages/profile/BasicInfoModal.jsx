@@ -57,7 +57,7 @@ export default function BasicInfoModal({ isOpen, onClose, profile, accessToken, 
 
   if (!isOpen) return null;
 
-  const locationEmpty = !countryCode || !stateCode;
+  const noLocationSelected = !countryCode && !stateCode;
 
   const handleSave = async () => {
     if (!accessToken) {
@@ -72,7 +72,7 @@ export default function BasicInfoModal({ isOpen, onClose, profile, accessToken, 
       const selectedState = states.find((item) => item.isoCode === stateCode);
       const payload = {
         gender: gender ? String(gender).toLowerCase() : "",
-        location: locationEmpty
+        location: noLocationSelected
           ? { country: "", province: "" }
           : {
               country: selectedCountry?.name || "",
@@ -190,7 +190,7 @@ export default function BasicInfoModal({ isOpen, onClose, profile, accessToken, 
                   }}
                   disabled={!countryCode}
                 >
-                  <option value="">Select province</option>
+                  <option value="">Select province (optional)</option>
                   {states.map((item) => (
                     <option key={item.isoCode} value={item.isoCode}>
                       {item.name}
@@ -211,7 +211,7 @@ export default function BasicInfoModal({ isOpen, onClose, profile, accessToken, 
             type="button"
             className="btn btn-dark"
             onClick={handleSave}
-            disabled={saving || locationEmpty}
+            disabled={saving}
           >
             {saving ? "Saving..." : "Save Changes"}
           </button>

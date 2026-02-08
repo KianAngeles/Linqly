@@ -11,6 +11,7 @@ import { API_BASE } from "../api/http";
 import pinIcon from "../assets/icons/pin.png";
 import showIcon from "../assets/icons/map-icons/show.png";
 import hiddenIcon from "../assets/icons/map-icons/hidden.png";
+import removeAttendeeIcon from "../assets/icons/map-icons/remove.png";
 import "./HangoutsMap.css";
 import MapGate from "../components/hangouts/MapGate";
 import MapSearch from "../components/hangouts/MapSearch";
@@ -189,6 +190,8 @@ export default function HangoutsMap() {
   const [showMyHangouts, setShowMyHangouts] = useState(false);
   const [shareNote, setShareNote] = useState("");
   const [shareNoteError, setShareNoteError] = useState("");
+  const [joinActionError, setJoinActionError] = useState("");
+  const [joinRequestActionKey, setJoinRequestActionKey] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -205,11 +208,14 @@ export default function HangoutsMap() {
     durationMinutes: 120,
     visibility: "friends",
     maxAttendees: "",
+    anyoneCanJoin: true,
     createGroupChat: true,
   }));
   const [searchParams] = useSearchParams();
   const hangoutIdParam = searchParams.get("hangoutId");
   const handledHangoutIdRef = useRef(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [removeAttendeeTarget, setRemoveAttendeeTarget] = useState(null);
 
   const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN || "", []);
 
@@ -320,8 +326,8 @@ export default function HangoutsMap() {
           type: "fill",
           source: "hangout-radius",
           paint: {
-            "fill-color": "#0d6efd",
-            "fill-opacity": 0.08,
+            "fill-color": "#6b7280",
+            "fill-opacity": 0.18,
           },
         });
         map.addLayer({
@@ -329,7 +335,7 @@ export default function HangoutsMap() {
           type: "line",
           source: "hangout-radius",
           paint: {
-            "line-color": "#0d6efd",
+            "line-color": "#111827",
             "line-width": 2,
             "line-opacity": 0.5,
           },
@@ -735,6 +741,11 @@ export default function HangoutsMap() {
   }, [selectedId, accessToken]);
 
   useEffect(() => {
+    setJoinActionError("");
+    setJoinRequestActionKey("");
+  }, [selected?._id]);
+
+  useEffect(() => {
     if (!hangoutIdParam) return;
     if (handledHangoutIdRef.current === hangoutIdParam) return;
     handledHangoutIdRef.current = hangoutIdParam;
@@ -788,6 +799,8 @@ export default function HangoutsMap() {
     selected?.maxAttendees &&
     selected.attendeeCount >= selected.maxAttendees &&
     !isJoined;
+  const isJoinApprovalRequired = (selected?.joinPolicy || "open") === "approval";
+  const isJoinRequestPending = String(selected?.joinRequestStatus || "none") === "pending";
   const joinedHangouts = useMemo(
     () =>
       feed.filter((h) => {
@@ -1051,6 +1064,7 @@ export default function HangoutsMap() {
 
   async function handleJoinLeave() {
     if (!selected || !accessToken) return;
+    setJoinActionError("");
     try {
       if (isJoined) {
         await hangoutsApi.leave(accessToken, selected._id);
@@ -1060,8 +1074,40 @@ export default function HangoutsMap() {
       }
       await loadFeed(center.lng, center.lat);
       await loadDetails(selected._id);
-    } catch {
-      // ignore for now
+    } catch (err) {
+      setJoinActionError(err.message || "Unable to update join state");
+    }
+  }
+
+  async function handleApproveJoinRequest(requestUserId) {
+    if (!selected?._id || !requestUserId || !accessToken) return;
+    const key = `accept:${requestUserId}`;
+    setJoinRequestActionKey(key);
+    setJoinActionError("");
+    try {
+      await hangoutsApi.acceptJoinRequest(accessToken, selected._id, requestUserId);
+      await loadFeed(center.lng, center.lat);
+      await loadDetails(selected._id);
+    } catch (err) {
+      setJoinActionError(err.message || "Unable to accept join request");
+    } finally {
+      setJoinRequestActionKey("");
+    }
+  }
+
+  async function handleDeclineJoinRequest(requestUserId) {
+    if (!selected?._id || !requestUserId || !accessToken) return;
+    const key = `decline:${requestUserId}`;
+    setJoinRequestActionKey(key);
+    setJoinActionError("");
+    try {
+      await hangoutsApi.declineJoinRequest(accessToken, selected._id, requestUserId);
+      await loadFeed(center.lng, center.lat);
+      await loadDetails(selected._id);
+    } catch (err) {
+      setJoinActionError(err.message || "Unable to decline join request");
+    } finally {
+      setJoinRequestActionKey("");
     }
   }
 
@@ -1075,6 +1121,45 @@ export default function HangoutsMap() {
     } catch {
       // ignore
     }
+  }
+
+  function openRemoveAttendeeConfirm(attendee) {
+    if (!attendee?.id || !selected?._id) return;
+    setRemoveAttendeeTarget({
+      id: String(attendee.id),
+      username: attendee.username || "user",
+      displayName: attendee.displayName || attendee.username || "user",
+    });
+  }
+
+  function closeRemoveAttendeeConfirm() {
+    setRemoveAttendeeTarget(null);
+  }
+
+  async function confirmRemoveAttendee() {
+    if (!selected?._id || !removeAttendeeTarget?.id || !accessToken) return;
+    try {
+      await hangoutsApi.removeAttendee(accessToken, selected._id, removeAttendeeTarget.id);
+      setRemoveAttendeeTarget(null);
+      await loadFeed(center.lng, center.lat);
+      await loadDetails(selected._id);
+    } catch (err) {
+      setJoinActionError(err.message || "Unable to remove attendee");
+    }
+  }
+
+  function openDeleteConfirm() {
+    if (!selected) return;
+    setShowDeleteConfirm(true);
+  }
+
+  function closeDeleteConfirm() {
+    setShowDeleteConfirm(false);
+  }
+
+  async function confirmDelete() {
+    await handleDelete();
+    setShowDeleteConfirm(false);
   }
 
   async function handleSubmit(e) {
@@ -1098,6 +1183,7 @@ export default function HangoutsMap() {
       durationMinutes: Number(formState.durationMinutes || 120),
       location: { lng: draftPin.lng, lat: draftPin.lat },
       visibility: formState.visibility,
+      anyoneCanJoin: formState.anyoneCanJoin !== false,
       maxAttendees:
         formState.maxAttendees === "" ? null : Number(formState.maxAttendees),
     };
@@ -1122,6 +1208,7 @@ export default function HangoutsMap() {
         durationMinutes: 120,
         visibility: "friends",
         maxAttendees: "",
+        anyoneCanJoin: true,
         createGroupChat: true,
       });
       await loadFeed(center.lng, center.lat);
@@ -1338,6 +1425,8 @@ export default function HangoutsMap() {
       durationMinutes: 120,
       visibility: "friends",
       maxAttendees: "",
+      anyoneCanJoin: true,
+      createGroupChat: true,
     });
   }
 
@@ -1365,6 +1454,8 @@ export default function HangoutsMap() {
       ),
       visibility: selected.visibility || "friends",
       maxAttendees: selected.maxAttendees ?? "",
+      anyoneCanJoin: (selected.joinPolicy || "open") !== "approval",
+      createGroupChat: true,
     });
     setFormError("");
     setShowCreate(true);
@@ -1434,9 +1525,17 @@ export default function HangoutsMap() {
               }
             }}
           >
-            <div className="hangout-list-avatar">
-              {getInitial(h.title || h.creator?.username)}
-            </div>
+            {resolveAvatar(h.creator?.avatarUrl) ? (
+              <img
+                src={resolveAvatar(h.creator?.avatarUrl)}
+                alt={h.creator?.username || "Creator"}
+                className="hangout-list-avatar hangout-list-avatar-img"
+              />
+            ) : (
+              <div className="hangout-list-avatar">
+                {getInitial(h.creator?.username || h.title)}
+              </div>
+            )}
             <div className="hangout-list-body">
               <div className="hangout-list-title">{h.title || "Untitled"}</div>
               <div className="hangout-list-subtitle">
@@ -1589,6 +1688,7 @@ export default function HangoutsMap() {
                       </button>
                       <HangoutDetailCard
                         selected={selected}
+                        currentUserId={user?.id}
                         userLocation={userLocation}
                         isCreator={isCreator}
                         isJoined={isJoined}
@@ -1610,7 +1710,21 @@ export default function HangoutsMap() {
                         distanceKm={distanceKm}
                         onClose={handleCloseDetail}
                         onJoinLeave={handleJoinLeave}
-                        onDelete={handleDelete}
+                        joinActionError={joinActionError}
+                        isJoinApprovalRequired={isJoinApprovalRequired}
+                        isJoinRequestPending={isJoinRequestPending}
+                        pendingJoinRequests={selected?.pendingJoinRequests || []}
+                        joinRequestActionKey={joinRequestActionKey}
+                        onApproveJoinRequest={handleApproveJoinRequest}
+                        onDeclineJoinRequest={handleDeclineJoinRequest}
+                        onOpenProfile={(username) => {
+                          const clean = String(username || "").replace(/^@+/, "").trim();
+                          if (!clean) return;
+                          nav(`/app/profile/${encodeURIComponent(clean)}`);
+                        }}
+                        removeAttendeeIcon={removeAttendeeIcon}
+                        onRequestRemoveAttendee={openRemoveAttendeeConfirm}
+                        onDelete={openDeleteConfirm}
                         onEdit={openEdit}
                         onToggleShareLocation={handleToggleShareLocation}
                         onToggleRoute={handleToggleRoute}
@@ -1706,6 +1820,77 @@ export default function HangoutsMap() {
           }))
         }
       />
+      {showDeleteConfirm && selected && (
+        <>
+          <div className="modal-backdrop show" />
+          <div className="modal d-block" tabIndex="-1" role="dialog">
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Delete hangout</h5>
+                  <button type="button" className="btn-close" onClick={closeDeleteConfirm} />
+                </div>
+                <div className="modal-body">
+                  <div className="fw-semibold mb-2">
+                    Are you sure you want to delete this hangout?
+                  </div>
+                  <div className="text-muted small">
+                    This will remove “{selected.title || "Untitled"}” for everyone.
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={closeDeleteConfirm}
+                  >
+                    Cancel
+                  </button>
+                  <button type="button" className="btn btn-danger" onClick={confirmDelete}>
+                    Delete hangout
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+      {removeAttendeeTarget && selected && (
+        <>
+          <div className="modal-backdrop show" />
+          <div className="modal d-block" tabIndex="-1" role="dialog">
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Remove attendee</h5>
+                  <button type="button" className="btn-close" onClick={closeRemoveAttendeeConfirm} />
+                </div>
+                <div className="modal-body">
+                  <div className="fw-semibold mb-2">
+                    Are you sure you want to remove {removeAttendeeTarget.displayName} from the
+                    hangout?
+                  </div>
+                  <div className="text-muted small">
+                    They will also be removed from the hangout group chat.
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={closeRemoveAttendeeConfirm}
+                  >
+                    Cancel
+                  </button>
+                  <button type="button" className="btn btn-danger" onClick={confirmRemoveAttendee}>
+                    Remove attendee
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

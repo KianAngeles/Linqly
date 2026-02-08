@@ -20,9 +20,12 @@ import darkMessageIcon from "../../assets/icons/dark-message.png";
 import imageIcon from "../../assets/icons/image.png";
 import micIcon from "../../assets/icons/mic.png";
 import sendIcon from "../../assets/icons/send.png";
+import callIcon from "../../assets/icons/call.png";
 import "../../pages/ChatsPanel.css";
 import "./UniversalChat.css";
 import { useNavigate } from "react-router-dom";
+import { useCall } from "../../store/CallContext";
+import { isChatUnread, markChatRead, useChatsStore } from "../../store/chatsStore";
 
 const MAX_OPEN = 3;
 
@@ -36,6 +39,10 @@ function MiniChatWindow({
   chatId,
   title,
   avatarUrl,
+  isDirect,
+  peerId,
+  peerName,
+  peerAvatar,
   accessToken,
   user,
   isMinimized,
@@ -44,9 +51,9 @@ function MiniChatWindow({
   isClosing,
   onMinimize,
   onClose,
-  onIncomingMessage,
 }) {
   const navigate = useNavigate();
+  const { startCall, isInCall } = useCall();
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [replyingTo, setReplyingTo] = useState(null);
@@ -58,6 +65,7 @@ function MiniChatWindow({
   const listRef = useRef(null);
   const pendingQueueRef = useRef([]);
   const pendingUrlsRef = useRef(new Map());
+  const lastCallRef = useRef(0);
 
   useEffect(() => {
     if (!accessToken || !chatId) return;
@@ -98,16 +106,14 @@ function MiniChatWindow({
             );
             return hasTemp ? replaced : [...prev, msg];
           });
-          onIncomingMessage?.(msg);
           return;
         }
       }
       setMessages((prev) => [...prev, msg]);
-      onIncomingMessage?.(msg);
     };
     socket.on("message:new", onNew);
     return () => socket.off("message:new", onNew);
-  }, [chatId, onIncomingMessage]);
+  }, [chatId]);
 
   useEffect(() => {
     const onReaction = (payload) => {
@@ -331,6 +337,22 @@ function MiniChatWindow({
     return mine?.emoji || null;
   }
 
+  const handleCall = (e) => {
+    e?.preventDefault?.();
+    if (!isDirect || !peerId || !chatId) return;
+    if (isInCall) return;
+    const now = Date.now();
+    if (now - lastCallRef.current < 500) return;
+    lastCallRef.current = now;
+    startCall({
+      chatId,
+      peerId,
+      peerName,
+      peerAvatar,
+      caller: user,
+    });
+  };
+
   async function unsendMessage(messageId) {
     if (!confirm("Unsend this message?")) return;
     try {
@@ -433,12 +455,16 @@ function MiniChatWindow({
         bottom: "20px",
       }
     : undefined;
+  const emptyIntroName = String(title || "User").trim() || "User";
+  const emptyIntroHandle = emptyIntroName.replace(/\s+/g, "").toLowerCase();
 
   return (
     <div
       className={`uc-mini ${isMinimized ? "is-minimized" : ""} ${
         isMinimizing ? "is-minimizing" : ""
-      } ${isClosing ? "is-closing" : ""}`}
+      } ${isClosing ? "is-closing" : ""} ${
+        !isMinimized && visibleMessages.length === 0 ? "is-empty" : ""
+      }`}
       style={expandedStyle}
     >
       {isMinimized ? (
@@ -471,6 +497,17 @@ function MiniChatWindow({
               </button>
             </div>
             <div className="uc-mini-actions">
+              {isDirect && (
+                <button
+                  type="button"
+                  className="uc-mini-call-btn"
+                  onClick={handleCall}
+                  disabled={isInCall}
+                  title="Start call"
+                >
+                  <img src={callIcon} alt="Start call" />
+                </button>
+              )}
               <button type="button" onClick={onMinimize} title="Minimize">
                 —
               </button>
@@ -480,7 +517,24 @@ function MiniChatWindow({
             </div>
           </div>
           <div className="uc-mini-body" ref={listRef} onScroll={handleListScroll}>
-            {visibleMessages.map((m, idx) => {
+            {visibleMessages.length === 0 ? (
+              <div className="chat-empty-intro">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={`${emptyIntroName} avatar`}
+                    className="chat-empty-intro-avatar"
+                  />
+                ) : (
+                  <div className="chat-empty-intro-avatar chat-empty-intro-avatar-fallback">
+                    {emptyIntroName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="chat-empty-intro-name">{emptyIntroName}</div>
+                <div className="chat-empty-intro-handle">@{emptyIntroHandle || "user"}</div>
+              </div>
+            ) : (
+              visibleMessages.map((m, idx) => {
               const isDeletedMessage =
                 String(m.type) === "system" ||
                 /deleted a message/i.test(String(m.text || ""));
@@ -698,7 +752,8 @@ function MiniChatWindow({
                   />
                 </div>
               );
-            })}
+              })
+            )}
           </div>
           <ReplyPreviewBar
             replyingTo={replyingTo}
@@ -738,10 +793,9 @@ export default function UniversalChat() {
   const { user, accessToken } = useAuth();
   const [panelOpen, setPanelOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [chats, setChats] = useState([]);
+  const { chats, setChats, unreadChatsCount } = useChatsStore(user?.id);
   const [friends, setFriends] = useState([]);
   const [openChats, setOpenChats] = useState([]);
-  const [unreadByChat, setUnreadByChat] = useState({});
   const minimizeTimersRef = useRef(new Map());
   const closeTimersRef = useRef(new Map());
 
@@ -756,30 +810,6 @@ export default function UniversalChat() {
       .then((data) => setFriends(data.friends || []))
       .catch(() => {});
   }, [accessToken]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    const onNew = (msg) => {
-      const senderId = msg.senderId || msg.sender?.id;
-      if (String(senderId) === String(user.id)) return;
-      const chatId = String(msg.chatId);
-      setUnreadByChat((prev) => {
-        const isOpen = openChats.some(
-          (c) => String(c.chatId) === chatId && !c.isMinimized
-        );
-        if (isOpen) return prev;
-        return { ...prev, [chatId]: (prev[chatId] || 0) + 1 };
-      });
-    };
-    socket.on("message:new", onNew);
-    return () => socket.off("message:new", onNew);
-  }, [openChats, user?.id]);
-
-  const unreadTotal = useMemo(
-    () =>
-      Object.values(unreadByChat).reduce((acc, v) => acc + (v || 0), 0),
-    [unreadByChat]
-  );
 
   const filteredChats = useMemo(() => {
     const q = String(search || "").trim().toLowerCase();
@@ -802,6 +832,8 @@ export default function UniversalChat() {
 
   const openChat = (chat) => {
     if (!chat?._id) return;
+    const isDirect = chat.type === "direct";
+    const peerUser = isDirect ? chat.otherUser || null : null;
     setOpenChats((prev) => {
       const existing = prev.find((c) => String(c.chatId) === String(chat._id));
       const nextChat = existing
@@ -813,6 +845,10 @@ export default function UniversalChat() {
               chat.type === "direct"
                 ? resolveAvatarUrl(chat.otherUser?.avatarUrl || "")
                 : resolveAvatarUrl(chat.avatarUrl || ""),
+            isDirect,
+            peerId: peerUser?.id || peerUser?._id || "",
+            peerName: peerUser?.username || peerUser?.displayName || "",
+            peerAvatar: resolveAvatarUrl(peerUser?.avatarUrl || ""),
             isMinimized: false,
           };
 
@@ -821,7 +857,11 @@ export default function UniversalChat() {
       if (ordered.length <= MAX_OPEN) return ordered;
       return ordered.slice(1);
     });
-    setUnreadByChat((prev) => ({ ...prev, [String(chat._id)]: 0 }));
+    markChatRead(
+      chat._id,
+      chat.lastMessageAt || chat.updatedAt || new Date().toISOString(),
+      chat.lastReadMessageId
+    );
   };
 
   const openDirectWithFriend = async (friend) => {
@@ -856,7 +896,9 @@ export default function UniversalChat() {
         onClick={() => setPanelOpen((v) => !v)}
       >
         <img src={darkMessageIcon} alt="Chat" className="uc-fab-icon" />
-        {unreadTotal > 0 && <span className="uc-fab-badge">{unreadTotal}</span>}
+        {unreadChatsCount > 0 && (
+          <span className="uc-fab-badge">{unreadChatsCount}</span>
+        )}
       </button>
 
       {panelOpen && (
@@ -896,21 +938,26 @@ export default function UniversalChat() {
                           setPanelOpen(false);
                         }}
                       >
-                        {avatarUrl ? (
-                          <img
-                            src={avatarUrl}
-                            alt={c.displayName || "Chat"}
-                            className="uc-list-avatar"
-                          />
-                        ) : (
-                          <div className="uc-list-avatar uc-list-fallback">
-                            {String(c.displayName || "?").charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                        <div className="uc-list-avatar-wrap">
+                          {avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt={c.displayName || "Chat"}
+                              className="uc-list-avatar"
+                            />
+                          ) : (
+                            <div className="uc-list-avatar uc-list-fallback">
+                              {String(c.displayName || "?").charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          {c.type === "direct" && c.otherUser?.isOnline ? (
+                            <span className="uc-list-online-dot" />
+                          ) : null}
+                        </div>
                         <span className="uc-list-title">
                           {c.displayName || "Chat"}
                         </span>
-                        {unreadByChat[String(c._id)] ? (
+                        {isChatUnread(c, user?.id) ? (
                           <span className="uc-unread-dot" />
                         ) : null}
                       </button>
@@ -970,6 +1017,10 @@ export default function UniversalChat() {
             chatId={c.chatId}
             title={c.title}
             avatarUrl={c.avatarUrl}
+            isDirect={c.isDirect}
+            peerId={c.peerId}
+            peerName={c.peerName}
+            peerAvatar={c.peerAvatar}
             accessToken={accessToken}
             user={user}
             isMinimized={c.isMinimized}
@@ -1020,9 +1071,6 @@ export default function UniversalChat() {
               }, 180);
               closeTimersRef.current.set(c.chatId, timer);
             }}
-            onIncomingMessage={() =>
-              setUnreadByChat((prev) => ({ ...prev, [c.chatId]: 0 }))
-            }
           />
           );
         })}

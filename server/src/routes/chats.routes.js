@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const multer = require("multer");
 const Chat = require("../models/Chat");
 const Message = require("../models/Message");
+const MessageRequest = require("../models/MessageRequest");
 const Friendship = require("../models/Friendship");
 const { authRequired } = require("../middleware/authRequired");
 const { makePairKey } = require("../utils/pairKey");
@@ -13,8 +14,14 @@ const User = require("../models/User");
 const { getIO, onlineUsers } = require("../realtime");
 const { resolveAvatar } = require("../utils/avatar");
 const cloudinary = require("../utils/cloudinary");
+const {
+  migrateLegacyDirectRequests,
+  getRequestStatusForViewer,
+} = require("../utils/messageRequests");
 
 const router = express.Router();
+const GROUP_CALLS_ENABLED =
+  String(process.env.GROUP_CALLS_ENABLED || "").toLowerCase() === "true";
 
 const uploadGroupAvatar = multer({
   storage: multer.memoryStorage(),
@@ -109,13 +116,16 @@ router.post("/direct", authRequired, async (req, res) => {
   if (String(userId) === String(me))
     return res.status(400).json({ message: "Cannot chat with yourself" });
 
-  // Optional: require users to be friends before chatting
+  // Allow non-friends to chat, but block if either user has blocked the other
   const pairKey = makePairKey(me, userId);
-  const rel = await Friendship.findOne({ pairKey });
-  if (!rel || rel.status !== "accepted") {
-    return res
-      .status(403)
-      .json({ message: "You must be friends to start a chat" });
+  const rel = await Friendship.findOne({ pairKey }).select("status blockedBy");
+  if (rel && rel.status === "blocked") {
+    const blockedByMe = String(rel.blockedBy) === String(me);
+    return res.status(403).json({
+      message: blockedByMe
+        ? "You blocked this user"
+        : "You have been blocked by this user",
+    });
   }
 
   const directKey = makePairKey(me, userId);
@@ -185,6 +195,7 @@ router.post("/group", authRequired, async (req, res) => {
     avatarUrl: null,
     pendingJoinRequests: [],
     requireAdminApproval: false,
+    allowAnyoneCall: true,
     lastMessageAt: null,
     lastMessageText: "",
   });
@@ -419,7 +430,7 @@ router.get("/:chatId", authRequired, async (req, res) => {
     .populate("creatorId", "username avatarUrl")
     .populate("pendingJoinRequests.userId", "username avatarUrl")
     .select(
-      "type name avatarUrl creatorId admins members pendingJoinRequests nicknames requireAdminApproval"
+      "type name avatarUrl creatorId admins members pendingJoinRequests nicknames requireAdminApproval allowAnyoneCall ongoingCall"
     );
 
   if (!chat) return res.status(404).json({ message: "Chat not found" });
@@ -467,7 +478,47 @@ router.get("/:chatId", authRequired, async (req, res) => {
           requestedAt: r.requestedAt,
         })),
       requireAdminApproval: chat.requireAdminApproval === true,
+      allowAnyoneCall: GROUP_CALLS_ENABLED && chat.allowAnyoneCall !== false,
+      ongoingCall: GROUP_CALLS_ENABLED ? chat.ongoingCall || null : null,
     },
+  });
+});
+
+// GET /chats/:chatId/ongoing-call
+router.get("/:chatId/ongoing-call", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { chatId } = req.params;
+
+  if (!mongoose.isValidObjectId(chatId)) {
+    return res.status(400).json({ message: "Invalid chatId" });
+  }
+
+  const chat = await Chat.findById(chatId).select(
+    "type members ongoingCall allowAnyoneCall creatorId admins name"
+  );
+  if (!chat) return res.status(404).json({ message: "Chat not found" });
+
+  const isMember = (chat.members || []).some((id) => String(id) === String(me));
+  if (!isMember) return res.status(403).json({ message: "Not a member" });
+  if (!["group", "hangout"].includes(chat.type)) {
+    return res.status(400).json({ message: "Not a group chat" });
+  }
+
+  if (!GROUP_CALLS_ENABLED) {
+    return res.json({
+      ongoingCall: null,
+      allowAnyoneCall: false,
+      canStartCall: false,
+      chatName: chat.name || "",
+    });
+  }
+
+  const isAdmin = isAdminOrCreator(chat, me);
+  res.json({
+    ongoingCall: chat.ongoingCall || null,
+    allowAnyoneCall: chat.allowAnyoneCall !== false,
+    canStartCall: chat.allowAnyoneCall !== false || isAdmin,
+    chatName: chat.name || "",
   });
 });
 
@@ -480,11 +531,18 @@ router.get("/:chatId/reads", authRequired, async (req, res) => {
     return res.status(400).json({ message: "Invalid chatId" });
   }
 
-  const chat = await Chat.findById(chatId).select("members");
+  const chat = await Chat.findById(chatId).select("members type");
   if (!chat) return res.status(404).json({ message: "Chat not found" });
 
   const isMember = chat.members.some((id) => String(id) === String(me));
   if (!isMember) return res.status(403).json({ message: "Not a member" });
+
+  if (chat.type === "direct") {
+    const requestDoc = await MessageRequest.findOne({ chatId }).select("status");
+    if (requestDoc && requestDoc.status !== "accepted") {
+      return res.json({ reads: [] });
+    }
+  }
 
   const reads = await ChatRead.find({ chatId })
     .select("userId lastReadMessageId readAt");
@@ -502,14 +560,15 @@ router.get("/:chatId/reads", authRequired, async (req, res) => {
 router.patch("/:chatId/group", authRequired, async (req, res) => {
   const me = req.user.userId;
   const { chatId } = req.params;
-  const { name, nicknameUserId, nickname, requireAdminApproval } = req.body || {};
+  const { name, nicknameUserId, nickname, requireAdminApproval, allowAnyoneCall } =
+    req.body || {};
 
   if (!mongoose.isValidObjectId(chatId)) {
     return res.status(400).json({ message: "Invalid chatId" });
   }
 
   const chat = await Chat.findById(chatId).select(
-    "type members creatorId admins hangoutId name nicknames requireAdminApproval"
+    "type members creatorId admins hangoutId name nicknames requireAdminApproval allowAnyoneCall"
   );
   if (!chat) return res.status(404).json({ message: "Chat not found" });
   if (!["group", "hangout", "direct"].includes(chat.type)) {
@@ -597,6 +656,15 @@ router.patch("/:chatId/group", authRequired, async (req, res) => {
       return res.status(403).json({ message: "Admin only" });
     }
     update.requireAdminApproval = requireAdminApproval;
+  }
+  if (typeof allowAnyoneCall === "boolean") {
+    if (!["group", "hangout"].includes(chat.type)) {
+      return res.status(400).json({ message: "Not a group chat" });
+    }
+    if (!isAdminOrCreator(chat, me)) {
+      return res.status(403).json({ message: "Admin only" });
+    }
+    update.allowAnyoneCall = allowAnyoneCall;
   }
 
   const updateOps = { $set: update };
@@ -1059,10 +1127,11 @@ router.get("/", authRequired, async (req, res) => {
     .sort({ lastMessageAt: -1, updatedAt: -1 })
     .populate("members", "username email avatarUrl")
     .select(
-      "_id type members name avatarUrl nicknames lastMessageAt lastMessageText lastMessageId lastMessageSenderId createdAt updatedAt"
+      "_id type members name avatarUrl nicknames creatorId admins allowAnyoneCall ongoingCall lastMessageAt lastMessageText lastMessageId lastMessageSenderId createdAt updatedAt"
     );
 
   const chatIds = chats.map((c) => c._id);
+  const requestMap = await migrateLegacyDirectRequests(chats);
 
   const readDocs = await ChatRead.find({
     userId: me,
@@ -1083,12 +1152,11 @@ router.get("/", authRequired, async (req, res) => {
       return other ? makePairKey(me, other._id) : null;
     })
     .filter(Boolean);
-  const blockedDocs = await Friendship.find({
+  const friendshipDocs = await Friendship.find({
     pairKey: { $in: directPairKeys },
-    status: "blocked",
-  }).select("pairKey blockedBy status");
-  const blockedMap = new Map(
-    blockedDocs.map((d) => [String(d.pairKey), d])
+  }).select("pairKey status requesterId receiverId blockedBy");
+  const friendshipMap = new Map(
+    friendshipDocs.map((d) => [String(d.pairKey), d])
   );
 
   // Attach settings + filter hidden
@@ -1119,17 +1187,47 @@ router.get("/", authRequired, async (req, res) => {
         const otherId = otherUser ? String(otherUser._id) : "";
         const otherNick = otherId ? nicknames[otherId] : "";
         displayName = otherNick || otherUser?.username || "Direct chat";
+        const requestDoc = requestMap.get(String(c._id)) || null;
+        const requestStatus = getRequestStatusForViewer(requestDoc, me);
+        if (requestStatus === "pending_incoming") return null;
         const pairKey = otherUser ? makePairKey(me, otherUser._id) : null;
-        const blockedDoc = pairKey ? blockedMap.get(String(pairKey)) : null;
+        const rel = pairKey ? friendshipMap.get(String(pairKey)) : null;
+        const blockedDoc = rel && rel.status === "blocked" ? rel : null;
         const blockedByMe =
           blockedDoc && String(blockedDoc.blockedBy) === String(me);
         const blockedByOther =
           blockedDoc && String(blockedDoc.blockedBy) !== String(me);
+        let friendStatus = "none";
+        if (rel) {
+          if (rel.status === "accepted") {
+            friendStatus = "friends";
+          } else if (rel.status === "pending") {
+            friendStatus =
+              String(rel.requesterId) === String(me)
+                ? "pending_outgoing"
+                : "pending_incoming";
+          } else if (rel.status === "blocked") {
+            friendStatus = "blocked";
+          } else {
+            friendStatus = String(rel.status || "none");
+          }
+        }
+        const pendingOrDeclined =
+          requestStatus === "pending_outgoing" ||
+          requestStatus === "declined_outgoing";
         return {
         ...c.toObject(),
         displayName,
         nicknames,
         avatarUrl: null,
+        friendStatus,
+        requestId: requestDoc?._id || null,
+        requestStatus,
+        messagingCaps: {
+          typing: !pendingOrDeclined,
+          readReceipts: !pendingOrDeclined,
+          calls: !pendingOrDeclined,
+        },
         otherUser: otherUser
           ? {
                 id: otherUser._id,
@@ -1139,7 +1237,9 @@ router.get("/", authRequired, async (req, res) => {
               }
             : null,
           settings,
-          ...readInfo,
+          ...(pendingOrDeclined
+            ? { lastReadMessageId: null, lastReadAt: null }
+            : readInfo),
           blockStatus: {
             isBlocked: Boolean(blockedDoc),
             blockedByMe: Boolean(blockedByMe),
@@ -1152,12 +1252,28 @@ router.get("/", authRequired, async (req, res) => {
         displayName = c.name?.trim() || "Hangout chat";
       }
 
+      const isGroupCreator = String(c.creatorId || "") === String(me);
+      const isGroupAdmin = (c.admins || []).some(
+        (adminId) => String(adminId) === String(me)
+      );
+      const canStartGroupCall =
+        c.type === "group" || c.type === "hangout"
+          ? GROUP_CALLS_ENABLED && (c.allowAnyoneCall !== false || isGroupCreator || isGroupAdmin)
+          : true;
+
       return {
         ...c.toObject(),
         displayName,
         nicknames,
+        requestStatus: "accepted",
+        messagingCaps: {
+          typing: true,
+          readReceipts: true,
+          calls: canStartGroupCall,
+        },
         avatarUrl:
           c.type === "group" || c.type === "hangout" ? c.avatarUrl || null : null,
+        ongoingCall: c.ongoingCall || null,
         otherUser: otherUser
           ? {
               id: otherUser._id,
@@ -1169,6 +1285,7 @@ router.get("/", authRequired, async (req, res) => {
         ...readInfo,
       };
     })
+    .filter(Boolean)
     .filter((c) => !c.settings.hiddenAt);
 
   // Sort pinned first, then newest

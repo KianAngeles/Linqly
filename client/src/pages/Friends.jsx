@@ -411,14 +411,9 @@ export default function Friends() {
                 </div>
               </div>
               <div className="friends-profile-actions">
-                {!isPreviewingFriend && (
-                  <button type="button" className="btn btn-dark w-100">
-                    Edit Profile
-                  </button>
-                )}
                 <button
                   type="button"
-                  className="btn btn-outline-secondary w-100"
+                  className="btn btn-dark w-100"
                   onClick={() => {
                     if (!usernameClean) return;
                     navigate(`/app/profile/${usernameClean}`);

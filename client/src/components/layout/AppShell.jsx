@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import HeaderBar from "./HeaderBar";
 import IncomingCallModal from "../calls/IncomingCallModal";
@@ -6,6 +6,9 @@ import UniversalChat from "../universal-chat/UniversalChat";
 import "./AppShell.css";
 
 export default function AppShell() {
+  const { pathname } = useLocation();
+  const hideUniversalChat = pathname === "/app/chats" || pathname.startsWith("/app/chats/");
+
   return (
     <div className="app-shell">
       <Sidebar />
@@ -16,7 +19,7 @@ export default function AppShell() {
         </main>
       </div>
       <IncomingCallModal />
-      <UniversalChat />
+      {!hideUniversalChat ? <UniversalChat /> : null}
     </div>
   );
 }

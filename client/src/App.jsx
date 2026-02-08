@@ -14,6 +14,7 @@ import Home from "./pages/Home";
 import Call from "./pages/Call";
 import Profile from "./pages/Profile";
 import SearchResults from "./pages/SearchResults";
+import Notifications from "./pages/Notifications";
 
 
 function Protected({ children }) {
@@ -58,6 +59,7 @@ export default function App() {
           <Route path="profile/:username" element={<Profile />} />
           <Route path="friends" element={<Friends />} />
           <Route path="search" element={<SearchResults />} />
+          <Route path="notifications" element={<Notifications />} />
           <Route path="settings" element={<Settings />} />
         </Route>
         <Route

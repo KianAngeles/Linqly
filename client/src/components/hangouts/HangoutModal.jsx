@@ -112,9 +112,30 @@ export default function HangoutModal({
                     />
                   </div>
                 </div>
-                {!isEditing && (
-                  <div className="mt-2">
-                    <div className="form-label mb-1">Create a Group Chat</div>
+                <div className="mt-2">
+                  <div className="form-label mb-1">Hangout Settings</div>
+                  <div className="form-check form-switch d-flex align-items-center gap-2 mb-2">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id="anyone-can-join-toggle"
+                      checked={formState.anyoneCanJoin !== false}
+                      onChange={(e) =>
+                        onChangeField("anyoneCanJoin", e.target.checked)
+                      }
+                    />
+                    <div className="text-muted small">
+                      <div className="fw-semibold text-dark">
+                        Anyone can join without approval
+                      </div>
+                      <div>
+                        {formState.anyoneCanJoin !== false
+                          ? "Anyone can join immediately."
+                          : "Users must request to join. You approve or decline requests."}
+                      </div>
+                    </div>
+                  </div>
+                  {!isEditing && (
                     <div className="form-check form-switch d-flex align-items-center gap-2">
                       <input
                         className="form-check-input"
@@ -126,11 +147,11 @@ export default function HangoutModal({
                         }
                       />
                       <span className="text-muted small">
-                        Adds a chat for attendees
+                        Automatically creates a group chat and adds all participating members.
                       </span>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               <div className="modal-footer">
                 <button

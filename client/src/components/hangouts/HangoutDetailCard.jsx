@@ -2,6 +2,7 @@
 import { useState } from "react";
 export default function HangoutDetailCard({
   selected,
+  currentUserId,
   userLocation,
   isCreator,
   isJoined,
@@ -23,6 +24,16 @@ export default function HangoutDetailCard({
   distanceKm,
   onClose,
   onJoinLeave,
+  joinActionError,
+  isJoinApprovalRequired,
+  isJoinRequestPending,
+  pendingJoinRequests,
+  joinRequestActionKey,
+  onApproveJoinRequest,
+  onDeclineJoinRequest,
+  onOpenProfile,
+  removeAttendeeIcon,
+  onRequestRemoveAttendee,
   onDelete,
   onEdit,
   onToggleShareLocation,
@@ -84,16 +95,130 @@ export default function HangoutDetailCard({
           <div className="d-flex flex-wrap gap-2 mt-2">
             {(selected.attendees || []).map((a) => {
               const src = resolveAvatar(a.avatarUrl);
-              return src ? (
-                <img key={a.id} src={src} alt={a.username} className="attendee-avatar" />
-              ) : (
-                <div key={a.id} className="attendee-fallback">
-                  {(a.username || "?").slice(0, 1).toUpperCase()}
+              const isSelf = String(a.id || "") === String(currentUserId || "");
+              const canRemove = isCreator && !isSelf;
+              return (
+                <div key={a.id} className={`attendee-tile ${canRemove ? "is-removable" : ""}`}>
+                  {src ? (
+                    <img src={src} alt={a.username} className="attendee-avatar" />
+                  ) : (
+                    <div className="attendee-fallback">
+                      {(a.username || "?").slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
+                  {canRemove ? (
+                    <button
+                      type="button"
+                      className="attendee-remove-btn"
+                      aria-label={`Remove ${a.displayName || a.username || "attendee"}`}
+                      onClick={() => onRequestRemoveAttendee?.(a)}
+                    >
+                      {removeAttendeeIcon ? (
+                        <img src={removeAttendeeIcon} alt="" aria-hidden="true" />
+                      ) : (
+                        "x"
+                      )}
+                    </button>
+                  ) : null}
                 </div>
               );
             })}
           </div>
         </div>
+
+        {isCreator && Array.isArray(pendingJoinRequests) && (
+          <div className="mt-3">
+            <div className="d-flex justify-content-between align-items-center">
+              <div className="text-muted small">Join requests ({pendingJoinRequests.length})</div>
+            </div>
+            {pendingJoinRequests.length === 0 ? (
+              <div className="text-muted small mt-1">No pending requests.</div>
+            ) : (
+              <div className="d-grid gap-2 mt-2">
+                {pendingJoinRequests.map((entry, idx) => {
+                  const reqUser = entry?.user || null;
+                  const reqId = String(reqUser?.id || "");
+                  const reqUsername = String(reqUser?.username || "").replace(/^@+/, "").trim();
+                  const reqDisplayName = String(
+                    reqUser?.displayName || reqUser?.username || "Unknown"
+                  ).trim();
+                  const reqAvatar = resolveAvatar(reqUser?.avatarUrl);
+                  const keyBase = reqId || `row-${idx}`;
+                  const accepting = joinRequestActionKey === `accept:${reqId}`;
+                  const declining = joinRequestActionKey === `decline:${reqId}`;
+                  const canOpenProfile = !!reqUsername;
+                  return (
+                    <div
+                      key={keyBase}
+                      className={`hangout-request-row ${canOpenProfile ? "" : "is-disabled-link"}`}
+                      onClick={() => {
+                        if (!canOpenProfile) return;
+                        onOpenProfile?.(reqUsername);
+                      }}
+                      role={canOpenProfile ? "button" : undefined}
+                      tabIndex={canOpenProfile ? 0 : -1}
+                      onKeyDown={(e) => {
+                        if (!canOpenProfile) return;
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onOpenProfile?.(reqUsername);
+                        }
+                      }}
+                    >
+                      <div className="hangout-request-avatar-wrap">
+                        {reqAvatar ? (
+                          <img
+                            src={reqAvatar}
+                            alt={reqDisplayName}
+                            className="hangout-request-avatar"
+                          />
+                        ) : (
+                          <div className="hangout-request-avatar hangout-request-avatar-fallback">
+                            {reqDisplayName.slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="hangout-request-meta">
+                        <div className="hangout-request-name">
+                          {reqDisplayName}
+                        </div>
+                        <div className="hangout-request-time">
+                          {entry?.requestedAt
+                            ? new Date(entry.requestedAt).toLocaleString()
+                            : ""}
+                        </div>
+                        <div className="hangout-request-actions">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-dark"
+                            disabled={!reqId || accepting || declining}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onApproveJoinRequest?.(reqId);
+                            }}
+                          >
+                            {accepting ? "Accepting..." : "Accept"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-secondary"
+                            disabled={!reqId || accepting || declining}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeclineJoinRequest?.(reqId);
+                            }}
+                          >
+                            {declining ? "Declining..." : "Decline"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {isJoined && (
           <div className="mt-3">
@@ -143,7 +268,7 @@ export default function HangoutDetailCard({
           <div className="mt-3">
             <button
               type="button"
-              className="btn btn-outline-primary btn-sm"
+              className="btn btn-sm hangout-route-btn"
               onClick={onToggleRoute}
               disabled={routeLoading}
             >
@@ -200,19 +325,30 @@ export default function HangoutDetailCard({
         ) : (
           <div className="d-grid gap-2">
             {isCreator ? (
-              <button type="button" className="btn btn-primary" onClick={onEdit}>
+              <button type="button" className="btn btn-dark" onClick={onEdit}>
                 Edit hangout
               </button>
             ) : (
-              <button
-                type="button"
-                className={`btn ${isJoined ? "btn-outline-secondary" : "btn-primary"}`}
-                onClick={onJoinLeave}
-                disabled={isFull}
-              >
-                {isJoined ? "Leave" : isFull ? "Hangout full" : "Join"}
+            <button
+              type="button"
+              className={`btn hangout-join-btn ${isJoined ? "is-joined" : ""}`}
+              onClick={onJoinLeave}
+              disabled={isFull || isJoinRequestPending}
+            >
+                {isJoined
+                  ? "Leave"
+                  : isFull
+                    ? "Hangout full"
+                    : isJoinRequestPending
+                      ? "Request sent"
+                      : isJoinApprovalRequired
+                        ? "Request to join"
+                        : "Join"}
               </button>
             )}
+            {joinActionError ? (
+              <div className="text-danger small">{joinActionError}</div>
+            ) : null}
             {isCreator && (
               <button type="button" className="btn btn-outline-danger" onClick={onDelete}>
                 Delete hangout

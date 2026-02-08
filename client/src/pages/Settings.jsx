@@ -371,7 +371,7 @@ export default function Settings() {
             />
           </div>
 
-          <button className="btn btn-primary" type="submit" disabled={saving}>
+          <button className="btn settings-save-btn" type="submit" disabled={saving}>
             {saving ? "Saving..." : "Save"}
           </button>
         </form>

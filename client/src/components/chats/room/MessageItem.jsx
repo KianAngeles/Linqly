@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import CallLogMessage from "./CallLogMessage";
+import GroupOngoingCallMessage from "../../calls/GroupOngoingCallMessage";
+import GroupCallEndedMessage from "../../calls/GroupCallEndedMessage";
+import { GROUP_CALLS_ENABLED } from "../../../constants/featureFlags";
 
 export default function MessageItem({
   message,
@@ -27,6 +31,9 @@ export default function MessageItem({
   reactions,
   seenIndicator,
   onImageClick,
+  onCallBack,
+  ongoingGroupCallState,
+  onJoinGroupCall,
 }) {
   const [showTimestamp, setShowTimestamp] = useState(false);
   const hoverTimerRef = useRef(null);
@@ -50,7 +57,7 @@ export default function MessageItem({
     return `${value.toFixed(value >= 10 || idx === 0 ? 0 : 1)} ${units[idx]}`;
   };
   const isPending = Boolean(message.pending);
-  const shouldRenderBubble = Boolean(message.text) || Boolean(message.isDeletedMessage);
+  const isCallLog = message.type === "call_log";
   const timestampSource = message.createdAt || message.sentAt || message.updatedAt;
   const formattedTimestamp = timestampSource
     ? new Date(timestampSource).toLocaleString()
@@ -187,6 +194,64 @@ export default function MessageItem({
                   {renderMessageText(message)}
                 </div>
               )
+            ) : message.type === "call_log" ? (
+              message.meta?.scope === "group" && !GROUP_CALLS_ENABLED ? (
+                <div
+                  className={`msg-bubble ${
+                    isMine ? "bg-primary text-white" : "msg-bubble-other"
+                  }`}
+                >
+                  {renderMessageText(message)}
+                </div>
+              ) : message.meta?.scope === "group" && message.meta?.status === "ongoing" ? (
+                <GroupOngoingCallMessage
+                  startedByName={
+                    ongoingGroupCallState?.startedByName ||
+                    message.meta?.startedByName ||
+                    "Unknown"
+                  }
+                  participantCount={
+                    ongoingGroupCallState?.participantCount ??
+                    message.meta?.participantCount ??
+                    0
+                  }
+                  participantNames={
+                    ongoingGroupCallState?.participants?.map((p) => p.name).filter(Boolean) ||
+                    message.meta?.participantNames ||
+                    []
+                  }
+                  createdAt={message.createdAt}
+                  onJoin={onJoinGroupCall}
+                  canJoin={
+                    Boolean(onJoinGroupCall) &&
+                    Boolean(ongoingGroupCallState?.callId) &&
+                    String(ongoingGroupCallState.callId) ===
+                      String(message.meta?.callId || "")
+                  }
+                  isRinging={
+                    Boolean(ongoingGroupCallState?.callId) &&
+                    String(ongoingGroupCallState.callId) ===
+                      String(message.meta?.callId || "") &&
+                    !(ongoingGroupCallState?.joinedUserIds || []).includes(
+                      String(ongoingGroupCallState?.currentUserId || "")
+                    )
+                  }
+                />
+              ) : message.meta?.scope === "group" && message.meta?.status === "ended" ? (
+                <GroupCallEndedMessage
+                  endedByName={message.meta?.endedByName || "Unknown"}
+                  endedAt={message.meta?.endedAt || message.createdAt}
+                  durationSec={message.meta?.durationSec || 0}
+                />
+              ) : (
+                <CallLogMessage
+                  status={message.meta?.callStatus}
+                  callType={message.meta?.callType || "audio"}
+                  durationSec={message.meta?.durationSec || 0}
+                  createdAt={message.createdAt}
+                  onCallBack={onCallBack}
+                />
+              )
             ) : (
               <div
                 className={`msg-bubble ${
@@ -218,111 +283,112 @@ export default function MessageItem({
               </div>
             )}
 
-            {/* hover actions */}
-            <div
-              className={`msg-actions ${isMine ? "actions-left" : "actions-right"}`}
-            >
-              {isMine ? (
-                <>
-                  <button
-                    type="button"
-                    className="msg-icon-btn"
-                    title="More"
-                    data-more-toggle="true"
-                    onClick={onMoreToggle}
-                  >
-                    <img
-                      src={moreIcon}
-                      alt="More"
-                      width={16}
-                      height={16}
-                      draggable="false"
-                      className="msg-more-icon"
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    className="msg-icon-btn"
-                    title="React"
-                    data-react-toggle="true"
-                    onClick={onReactToggle}
-                  >
-                    <img
-                      src={reactIcon}
-                      alt="React"
-                      width={16}
-                      height={16}
-                      draggable="false"
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    className="msg-icon-btn"
-                    title="Reply"
-                    onClick={onReplyToggle}
-                  >
-                    <img
-                      src={replyIcon}
-                      alt="Reply"
-                      width={16}
-                      height={16}
-                      draggable="false"
-                    />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="msg-icon-btn"
-                    title="Reply"
-                    onClick={onReplyToggle}
-                  >
-                    <img
-                      src={replyIcon}
-                      alt="Reply"
-                      width={16}
-                      height={16}
-                      draggable="false"
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    className="msg-icon-btn"
-                    title="React"
-                    data-react-toggle="true"
-                    onClick={onReactToggle}
-                  >
-                    <img
-                      src={reactIcon}
-                      alt="React"
-                      width={16}
-                      height={16}
-                      draggable="false"
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    className="msg-icon-btn"
-                    title="More"
-                    data-more-toggle="true"
-                    onClick={onMoreToggle}
-                  >
-                    <img
-                      src={moreIcon}
-                      alt="More"
-                      width={16}
-                      height={16}
-                      draggable="false"
-                      className="msg-more-icon"
-                    />
-                  </button>
-                </>
-              )}
-            </div>
+            {!isCallLog && (
+              <div
+                className={`msg-actions ${isMine ? "actions-left" : "actions-right"}`}
+              >
+                {isMine ? (
+                  <>
+                    <button
+                      type="button"
+                      className="msg-icon-btn"
+                      title="More"
+                      data-more-toggle="true"
+                      onClick={onMoreToggle}
+                    >
+                      <img
+                        src={moreIcon}
+                        alt="More"
+                        width={16}
+                        height={16}
+                        draggable="false"
+                        className="msg-more-icon"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      className="msg-icon-btn"
+                      title="React"
+                      data-react-toggle="true"
+                      onClick={onReactToggle}
+                    >
+                      <img
+                        src={reactIcon}
+                        alt="React"
+                        width={16}
+                        height={16}
+                        draggable="false"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      className="msg-icon-btn"
+                      title="Reply"
+                      onClick={onReplyToggle}
+                    >
+                      <img
+                        src={replyIcon}
+                        alt="Reply"
+                        width={16}
+                        height={16}
+                        draggable="false"
+                      />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="msg-icon-btn"
+                      title="Reply"
+                      onClick={onReplyToggle}
+                    >
+                      <img
+                        src={replyIcon}
+                        alt="Reply"
+                        width={16}
+                        height={16}
+                        draggable="false"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      className="msg-icon-btn"
+                      title="React"
+                      data-react-toggle="true"
+                      onClick={onReactToggle}
+                    >
+                      <img
+                        src={reactIcon}
+                        alt="React"
+                        width={16}
+                        height={16}
+                        draggable="false"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      className="msg-icon-btn"
+                      title="More"
+                      data-more-toggle="true"
+                      onClick={onMoreToggle}
+                    >
+                      <img
+                        src={moreIcon}
+                        alt="More"
+                        width={16}
+                        height={16}
+                        draggable="false"
+                        className="msg-more-icon"
+                      />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* emoji picker (only opens when emoji icon clicked) */}
-            {showPicker && (
+            {showPicker && !isCallLog && (
               <div
                 className={`msg-react-picker ${
                   isMine ? "picker-left" : "picker-right"
@@ -345,7 +411,7 @@ export default function MessageItem({
               </div>
             )}
 
-            {showMoreMenu && (canUnsend || canDeleteForMe) && (
+            {showMoreMenu && !isCallLog && (canUnsend || canDeleteForMe) && (
               <div className={`msg-more-menu ${isMine ? "menu-left" : "menu-right"}`}>
                 {canUnsend && (
                   <button type="button" onClick={onUnsend}>

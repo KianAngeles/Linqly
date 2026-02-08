@@ -16,6 +16,11 @@ const hangoutSchema = new mongoose.Schema(
       enum: ["friends", "public"],
       default: "friends",
     },
+    joinPolicy: {
+      type: String,
+      enum: ["open", "approval"],
+      default: "open",
+    },
     avatarUrl: { type: String, default: null },
     avatarPublicId: { type: String, default: null },
     maxAttendees: {
@@ -35,6 +40,19 @@ const hangoutSchema = new mongoose.Schema(
       },
     ],
     attendeeIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    pendingJoinRequests: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        requestedAt: { type: Date, default: () => new Date() },
+      },
+    ],
+    approvedJoinEvents: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        approvedById: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        approvedAt: { type: Date, default: () => new Date() },
+      },
+    ],
   },
   { timestamps: true }
 );

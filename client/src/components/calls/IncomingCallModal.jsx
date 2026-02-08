@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useCall } from "../../store/CallContext";
+import { GROUP_CALLS_ENABLED } from "../../constants/featureFlags";
 import "./IncomingCallModal.css";
 
 export default function IncomingCallModal() {
@@ -36,9 +37,14 @@ export default function IncomingCallModal() {
   }, [incomingCall]);
 
   if (!incomingCall) return null;
+  if (incomingCall.scope === "group" && !GROUP_CALLS_ENABLED) return null;
 
   const initial =
     incomingCall.peerName?.trim().charAt(0).toUpperCase() || "?";
+  const isGroupCall = incomingCall.scope === "group";
+  const callText = isGroupCall
+    ? `${incomingCall.peerName} started a group call`
+    : `${incomingCall.peerName} is calling you`;
 
   return (
     <div className="incoming-call-backdrop">
@@ -54,7 +60,7 @@ export default function IncomingCallModal() {
           )}
         </div>
         <div className="incoming-call-text">
-          {incomingCall.peerName} is calling you
+          {callText}
         </div>
         <div className="incoming-call-actions">
           <button

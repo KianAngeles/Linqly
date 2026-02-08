@@ -3,14 +3,17 @@ const mongoose = require("mongoose");
 const multer = require("multer");
 const Chat = require("../models/Chat");
 const Message = require("../models/Message");
-const Friendship = require("../models/Friendship");
 const { authRequired } = require("../middleware/authRequired");
-const { getIO } = require("../realtime");
+const { getIO, onlineUsers } = require("../realtime");
 const ChatSetting = require("../models/ChatSetting");
+const MessageRequest = require("../models/MessageRequest");
 const User = require("../models/User");
 const { resolveAvatar } = require("../utils/avatar");
 const cloudinary = require("../utils/cloudinary");
-const { makePairKey } = require("../utils/pairKey");
+const {
+  resolveDirectMessagePolicy,
+  upsertRequestAfterDirectMessage,
+} = require("../utils/messageRequests");
 const http = require("http");
 const https = require("https");
 
@@ -88,24 +91,27 @@ function extractLinks(text) {
   return matches ? matches.map((m) => m.replace(/[),.;!?]+$/, "")) : [];
 }
 
-
-async function blockMessageSendIfNeeded({ chat, senderId, res }) {
-  if (!chat || chat.type !== "direct") return false;
-  const members = chat.members || [];
-  const other = members.find((m) => String(m._id || m) !== String(senderId));
-  if (!other) return false;
-
-  const pairKey = makePairKey(senderId, other._id || other);
-  const rel = await Friendship.findOne({ pairKey }).select("status blockedBy");
-  if (!rel || rel.status !== "blocked") return false;
-
-  const blockedByMe = String(rel.blockedBy) === String(senderId);
-  return res.status(403).json({
-    message: blockedByMe
-      ? "You blocked this user"
-      : "You have been blocked by this user",
-  });
+function emitToUser(userId, event, payload) {
+  if (!userId) return;
+  const io = getIO();
+  if (!io) return;
+  const sockets = onlineUsers.get(String(userId));
+  if (!sockets || sockets.size === 0) return;
+  sockets.forEach((socketId) => io.to(socketId).emit(event, payload));
 }
+
+async function canViewChatMessages({ chatId, viewerId }) {
+  const requestDoc = await MessageRequest.findOne({ chatId }).select("status toUserId");
+  if (!requestDoc) return true;
+  if (
+    requestDoc.status === "declined" &&
+    String(requestDoc.toUserId || "") === String(viewerId || "")
+  ) {
+    return false;
+  }
+  return true;
+}
+
 
 /**
  * GET /messages/attachments?chatId=...&kind=media|files|links&limit=...
@@ -124,6 +130,8 @@ router.get("/attachments", authRequired, async (req, res) => {
   if (!chat) return res.status(404).json({ message: "Chat not found" });
   const isMember = chat.members.some((m) => String(m) === String(me));
   if (!isMember) return res.status(403).json({ message: "Not a member" });
+  const canView = await canViewChatMessages({ chatId, viewerId: me });
+  if (!canView) return res.status(404).json({ message: "Chat not found" });
 
   if (!["media", "files", "links"].includes(kind)) {
     return res.status(400).json({ message: "Invalid kind" });
@@ -251,7 +259,7 @@ router.get("/", authRequired, async (req, res) => {
     .limit(limit)
     .populate("senderId", "username avatarUrl")
     .select(
-      "_id chatId senderId type text imageUrl fileUrl fileName fileType fileSize createdAt replyTo replyPreview reactions mentions"
+      "_id chatId senderId type text imageUrl fileUrl fileName fileType fileSize createdAt replyTo replyPreview reactions mentions meta"
     );
 
   const nextCursor = messages.length
@@ -278,6 +286,7 @@ router.get("/", authRequired, async (req, res) => {
     replyPreview: m.replyPreview || null,
     reactions: m.reactions || [],
     mentions: m.mentions || [],
+    meta: m.meta || null,
   }));
 
   res.json({ messages: out, nextCursor });
@@ -310,7 +319,12 @@ router.post("/", authRequired, async (req, res) => {
   );
   if (!isMember)
     return res.status(403).json({ message: "Not a member of this chat" });
-  if (await blockMessageSendIfNeeded({ chat, senderId: me, res })) return;
+  const canView = await canViewChatMessages({ chatId, viewerId: me });
+  if (!canView) return res.status(404).json({ message: "Chat not found" });
+  const policy = await resolveDirectMessagePolicy({ chat, senderId: me });
+  if (!policy.allowed) {
+    return res.status(policy.code || 403).json({ message: policy.message || "Not allowed" });
+  }
 
   let replyPreview = { text: "", senderUsername: "" };
   let replyToId = null;
@@ -391,6 +405,26 @@ router.post("/", authRequired, async (req, res) => {
       },
     }
   );
+
+  const requestDoc = await upsertRequestAfterDirectMessage({
+    chat,
+    policy,
+    senderId: me,
+    messageType: msg.type,
+    messageText: msg.text,
+    messageCreatedAt: msg.createdAt,
+  });
+  if (policy.shouldCreatePendingRequest && requestDoc?.toUserId) {
+    emitToUser(requestDoc.toUserId, "message_request:new", {
+      requestId: requestDoc._id,
+      chatId: requestDoc.chatId,
+      fromUserId: requestDoc.fromUserId,
+      toUserId: requestDoc.toUserId,
+      status: requestDoc.status,
+      lastMessageAt: requestDoc.lastMessageAt,
+      lastMessageText: requestDoc.lastMessageText,
+    });
+  }
 
   const io = getIO();
   if (io) {
@@ -484,6 +518,94 @@ router.post("/system", authRequired, async (req, res) => {
 });
 
 /**
+ * POST /messages/call-log { chatId, callType, callStatus, durationSec? }
+ */
+router.post("/call-log", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { chatId, callType, callStatus } = req.body || {};
+  const durationRaw = Number(req.body?.durationSec);
+  const durationSec = Number.isFinite(durationRaw)
+    ? Math.max(0, Math.floor(durationRaw))
+    : 0;
+
+  if (!chatId) return res.status(400).json({ message: "chatId required" });
+  if (!mongoose.isValidObjectId(chatId)) {
+    return res.status(400).json({ message: "Invalid chatId" });
+  }
+  if (callType !== "audio") {
+    return res.status(400).json({ message: "Invalid callType" });
+  }
+  if (!["missed", "completed"].includes(String(callStatus || ""))) {
+    return res.status(400).json({ message: "Invalid callStatus" });
+  }
+
+  const chat = await Chat.findById(chatId).select("members type");
+  if (!chat) return res.status(404).json({ message: "Chat not found" });
+  if (chat.type !== "direct") {
+    return res.status(400).json({ message: "Call logs are only supported for direct chats" });
+  }
+
+  const isMember = chat.members.some((m) => String(m._id || m) === String(me));
+  if (!isMember) return res.status(403).json({ message: "Not a member of this chat" });
+  const canView = await canViewChatMessages({ chatId, viewerId: me });
+  if (!canView) return res.status(404).json({ message: "Chat not found" });
+
+  const cleanText = callStatus === "missed" ? "Missed audio call" : "Audio call";
+  const msg = await Message.create({
+    chatId,
+    senderId: me,
+    type: "call_log",
+    text: cleanText,
+    replyTo: null,
+    replyPreview: { text: "", senderUsername: "" },
+    reactions: [],
+    mentions: [],
+    meta: {
+      callType: "audio",
+      callStatus,
+      durationSec,
+    },
+  });
+
+  const senderUser = await User.findById(me).select("username avatarUrl");
+
+  await Chat.updateOne(
+    { _id: chatId },
+    {
+      $set: {
+        lastMessageAt: msg.createdAt,
+        lastMessageText: cleanText,
+        lastMessageId: msg._id,
+        lastMessageSenderId: me,
+      },
+    }
+  );
+
+  const io = getIO();
+  if (io) {
+    io.to(String(chatId)).emit("message:new", {
+      id: msg._id,
+      chatId,
+      sender: {
+        id: me,
+        username: senderUser?.username || "You",
+        avatarUrl: resolveAvatar(senderUser),
+      },
+      type: msg.type,
+      text: msg.text,
+      meta: msg.meta || null,
+      createdAt: msg.createdAt,
+      replyTo: msg.replyTo,
+      replyPreview: msg.replyPreview,
+      reactions: msg.reactions,
+      mentions: msg.mentions || [],
+    });
+  }
+
+  res.status(201).json({ message: { id: msg._id, createdAt: msg.createdAt } });
+});
+
+/**
  * POST /messages/image { chatId, replyTo? } + image file
  */
 router.post("/image", authRequired, (req, res) => {
@@ -505,12 +627,15 @@ router.post("/image", authRequired, (req, res) => {
       .select("members type");
     if (!chat) return res.status(404).json({ message: "Chat not found" });
 
-    const isMember = chat.members.some(
-      (m) => String(m._id || m) === String(me)
-    );
-    if (!isMember)
-      return res.status(403).json({ message: "Not a member of this chat" });
-    if (await blockMessageSendIfNeeded({ chat, senderId: me, res })) return;
+  const isMember = chat.members.some(
+    (m) => String(m._id || m) === String(me)
+  );
+  if (!isMember)
+    return res.status(403).json({ message: "Not a member of this chat" });
+  const policy = await resolveDirectMessagePolicy({ chat, senderId: me });
+  if (!policy.allowed) {
+    return res.status(policy.code || 403).json({ message: policy.message || "Not allowed" });
+  }
 
     let replyPreview = { text: "", senderUsername: "" };
     let replyToId = null;
@@ -586,6 +711,26 @@ router.post("/image", authRequired, (req, res) => {
     }
   );
 
+  const requestDoc = await upsertRequestAfterDirectMessage({
+    chat,
+    policy,
+    senderId: me,
+    messageType: msg.type,
+    messageText: msg.text,
+    messageCreatedAt: msg.createdAt,
+  });
+  if (policy.shouldCreatePendingRequest && requestDoc?.toUserId) {
+    emitToUser(requestDoc.toUserId, "message_request:new", {
+      requestId: requestDoc._id,
+      chatId: requestDoc.chatId,
+      fromUserId: requestDoc.fromUserId,
+      toUserId: requestDoc.toUserId,
+      status: requestDoc.status,
+      lastMessageAt: requestDoc.lastMessageAt,
+      lastMessageText: requestDoc.lastMessageText,
+    });
+  }
+
     const io = getIO();
     if (io) {
       io.to(String(chatId)).emit("message:new", {
@@ -642,7 +787,12 @@ router.post("/file", authRequired, (req, res) => {
     );
     if (!isMember)
       return res.status(403).json({ message: "Not a member of this chat" });
-    if (await blockMessageSendIfNeeded({ chat, senderId: me, res })) return;
+    const policy = await resolveDirectMessagePolicy({ chat, senderId: me });
+    if (!policy.allowed) {
+      return res
+        .status(policy.code || 403)
+        .json({ message: policy.message || "Not allowed" });
+    }
 
     let replyPreview = { text: "", senderUsername: "" };
     let replyToId = null;
@@ -726,6 +876,26 @@ router.post("/file", authRequired, (req, res) => {
       }
     );
 
+    const requestDoc = await upsertRequestAfterDirectMessage({
+      chat,
+      policy,
+      senderId: me,
+      messageType: msg.type,
+      messageText: msg.text,
+      messageCreatedAt: msg.createdAt,
+    });
+    if (policy.shouldCreatePendingRequest && requestDoc?.toUserId) {
+      emitToUser(requestDoc.toUserId, "message_request:new", {
+        requestId: requestDoc._id,
+        chatId: requestDoc.chatId,
+        fromUserId: requestDoc.fromUserId,
+        toUserId: requestDoc.toUserId,
+        status: requestDoc.status,
+        lastMessageAt: requestDoc.lastMessageAt,
+        lastMessageText: requestDoc.lastMessageText,
+      });
+    }
+
     const io = getIO();
     if (io) {
       io.to(String(chatId)).emit("message:new", {
@@ -781,7 +951,12 @@ router.post("/voice", authRequired, (req, res) => {
     );
     if (!isMember)
       return res.status(403).json({ message: "Not a member of this chat" });
-    if (await blockMessageSendIfNeeded({ chat, senderId: me, res })) return;
+    const policy = await resolveDirectMessagePolicy({ chat, senderId: me });
+    if (!policy.allowed) {
+      return res
+        .status(policy.code || 403)
+        .json({ message: policy.message || "Not allowed" });
+    }
 
     let replyPreview = { text: "", senderUsername: "" };
     let replyToId = null;
@@ -860,6 +1035,26 @@ router.post("/voice", authRequired, (req, res) => {
         },
       }
     );
+
+    const requestDoc = await upsertRequestAfterDirectMessage({
+      chat,
+      policy,
+      senderId: me,
+      messageType: msg.type,
+      messageText: msg.text,
+      messageCreatedAt: msg.createdAt,
+    });
+    if (policy.shouldCreatePendingRequest && requestDoc?.toUserId) {
+      emitToUser(requestDoc.toUserId, "message_request:new", {
+        requestId: requestDoc._id,
+        chatId: requestDoc.chatId,
+        fromUserId: requestDoc.fromUserId,
+        toUserId: requestDoc.toUserId,
+        status: requestDoc.status,
+        lastMessageAt: requestDoc.lastMessageAt,
+        lastMessageText: requestDoc.lastMessageText,
+      });
+    }
 
     const io = getIO();
     if (io) {

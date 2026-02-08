@@ -5,8 +5,9 @@ const Chat = require("../models/Chat");
 const Message = require("../models/Message");
 const ChatSetting = require("../models/ChatSetting");
 const Friendship = require("../models/Friendship");
+const User = require("../models/User");
 const { authRequired } = require("../middleware/authRequired");
-const { getIO } = require("../realtime");
+const { getIO, onlineUsers } = require("../realtime");
 
 const router = express.Router();
 
@@ -15,17 +16,79 @@ function asNumber(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function normalizeJoinPolicy(input) {
+  if (input === "approval") return "approval";
+  if (input === "open") return "open";
+  if (typeof input === "boolean") return input ? "open" : "approval";
+  return "open";
+}
+
 function toUserSummary(user) {
   if (!user) return null;
+  if (typeof user === "string" || user instanceof mongoose.Types.ObjectId) {
+    return {
+      id: user,
+      username: "Unknown",
+      avatarUrl: null,
+    };
+  }
   return {
     id: user._id,
+    displayName: user.displayName || user.username,
     username: user.username,
     avatarUrl: user.avatarUrl || null,
   };
 }
 
+function emitToUser(userId, event, payload) {
+  if (!userId) return;
+  const io = getIO();
+  if (!io) return;
+  const socketIds = onlineUsers.get(String(userId));
+  if (!socketIds || socketIds.size === 0) return;
+  socketIds.forEach((socketId) => {
+    io.to(socketId).emit(event, payload);
+  });
+}
+
+async function emitSystemMessage(chatId, senderId, text) {
+  if (!chatId || !senderId || !text) return;
+  const msg = await Message.create({
+    chatId,
+    senderId,
+    type: "system",
+    text,
+    replyTo: null,
+    replyPreview: { text: "", senderUsername: "" },
+    reactions: [],
+  });
+
+  await Chat.updateOne(
+    { _id: chatId },
+    {
+      $set: {
+        lastMessageAt: msg.createdAt,
+        lastMessageText: text,
+        lastMessageId: msg._id,
+        lastMessageSenderId: msg.senderId,
+      },
+    }
+  );
+
+  const io = getIO();
+  if (io) {
+    io.to(String(chatId)).emit("message:new", {
+      id: msg._id,
+      chatId,
+      type: msg.type,
+      text: msg.text,
+      createdAt: msg.createdAt,
+    });
+  }
+}
+
 function toHangoutSummary(doc, opts = {}) {
-  const { includeSharedLocations = false } = opts;
+  const { includeSharedLocations = false, viewerId = null } = opts;
   let sharedLocations = [];
   if (includeSharedLocations) {
     const attendeeById = new Map();
@@ -42,6 +105,18 @@ function toHangoutSummary(doc, opts = {}) {
       };
     });
   }
+  const viewer = String(viewerId || "");
+  const creatorId = String(doc.creatorId?._id || doc.creatorId || "");
+  const pendingJoinRequestsRaw = Array.isArray(doc.pendingJoinRequests)
+    ? doc.pendingJoinRequests
+    : [];
+  const pendingJoinRequests = pendingJoinRequestsRaw.map((entry) => ({
+    user: toUserSummary(entry.userId),
+    requestedAt: entry.requestedAt,
+  }));
+  const viewerPendingRequest = pendingJoinRequestsRaw.some(
+    (entry) => String(entry?.userId?._id || entry?.userId || "") === viewer
+  );
 
   return {
     _id: doc._id,
@@ -52,10 +127,14 @@ function toHangoutSummary(doc, opts = {}) {
     endsAt: doc.endsAt,
     maxAttendees: doc.maxAttendees ?? null,
     visibility: doc.visibility || "friends",
+    joinPolicy: doc.joinPolicy || "open",
     avatarUrl: doc.avatarUrl || null,
     creator: toUserSummary(doc.creatorId),
     attendees: (doc.attendeeIds || []).map(toUserSummary),
     attendeeCount: (doc.attendeeIds || []).length,
+    joinRequestStatus: viewerPendingRequest ? "pending" : "none",
+    pendingJoinRequests:
+      viewer && viewer === creatorId ? pendingJoinRequests : [],
     sharedLocations,
   };
 }
@@ -100,7 +179,17 @@ function parseStartsEnds({ startsAt, endsAt, durationMinutes }) {
 // POST /hangouts
 router.post("/", authRequired, async (req, res) => {
   const me = req.user.userId;
-  const { title, description, visibility, location, lng, lat, createGroupChat } = req.body;
+  const {
+    title,
+    description,
+    visibility,
+    location,
+    lng,
+    lat,
+    createGroupChat,
+    anyoneCanJoin,
+    joinPolicy: requestedJoinPolicy,
+  } = req.body;
 
   if (!title || !title.trim()) {
     return res.status(400).json({ message: "Title is required" });
@@ -131,6 +220,9 @@ router.post("/", authRequired, async (req, res) => {
     startsAt: start,
     endsAt: end,
     visibility: visibility || "friends",
+    joinPolicy: normalizeJoinPolicy(
+      requestedJoinPolicy !== undefined ? requestedJoinPolicy : anyoneCanJoin
+    ),
     maxAttendees,
     attendeeIds: [me],
   });
@@ -148,13 +240,13 @@ router.post("/", authRequired, async (req, res) => {
     });
   }
 
-  await doc.populate("creatorId", "username avatarUrl");
-  await doc.populate("attendeeIds", "username avatarUrl");
+  await doc.populate("creatorId", "username displayName avatarUrl");
+  await doc.populate("attendeeIds", "username displayName avatarUrl");
 
   const io = getIO();
   if (io) io.emit("hangout:new", { hangoutId: doc._id.toString() });
 
-  res.status(201).json({ hangout: toHangoutSummary(doc) });
+  res.status(201).json({ hangout: toHangoutSummary(doc, { viewerId: me }) });
 });
 
 // GET /hangouts/mine
@@ -164,10 +256,13 @@ router.get("/mine", authRequired, async (req, res) => {
     $or: [{ creatorId: me }, { attendeeIds: me }],
   })
     .sort({ startsAt: -1 })
-    .populate("creatorId", "username avatarUrl")
-    .populate("attendeeIds", "username avatarUrl");
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl")
+    .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
 
-  return res.json({ hangouts: docs.map((doc) => toHangoutSummary(doc)) });
+  return res.json({
+    hangouts: docs.map((doc) => toHangoutSummary(doc, { viewerId: me })),
+  });
 });
 
 // GET /hangouts/feed?lng=&lat=&radius=
@@ -195,8 +290,9 @@ router.get("/feed", authRequired, async (req, res) => {
   };
 
   const docs = await Hangout.find(query)
-    .populate("creatorId", "username avatarUrl")
-    .populate("attendeeIds", "username avatarUrl");
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl")
+    .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
 
   docs.sort((a, b) => {
     const aStart = new Date(a.startsAt).getTime();
@@ -205,7 +301,7 @@ router.get("/feed", authRequired, async (req, res) => {
     return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
   });
 
-  res.json({ hangouts: docs.map(toHangoutSummary) });
+  res.json({ hangouts: docs.map((doc) => toHangoutSummary(doc, { viewerId: me })) });
 });
 
 // GET /hangouts/:id
@@ -218,8 +314,9 @@ router.get("/:id", authRequired, async (req, res) => {
   }
 
   const doc = await Hangout.findById(id)
-    .populate("creatorId", "username avatarUrl")
-    .populate("attendeeIds", "username avatarUrl");
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl")
+    .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
 
   if (!doc) return res.status(404).json({ message: "Hangout not found" });
 
@@ -232,7 +329,9 @@ router.get("/:id", authRequired, async (req, res) => {
     return res.status(403).json({ message: "Not allowed" });
   }
 
-  res.json({ hangout: toHangoutSummary(doc, { includeSharedLocations: true }) });
+  res.json({
+    hangout: toHangoutSummary(doc, { includeSharedLocations: true, viewerId: me }),
+  });
 });
 
 // POST /hangouts/:id/join
@@ -260,17 +359,59 @@ router.post("/:id/join", authRequired, async (req, res) => {
   }
 
   const alreadyJoined = doc.attendeeIds.some((id) => String(id) === String(me));
+  const alreadyRequested = (doc.pendingJoinRequests || []).some(
+    (entry) => String(entry?.userId || "") === String(me)
+  );
+  if (!alreadyJoined && alreadyRequested) {
+    const refreshed = await Hangout.findById(id)
+      .populate("creatorId", "username displayName avatarUrl")
+      .populate("attendeeIds", "username displayName avatarUrl")
+      .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
+    return res.status(409).json({
+      message: "Join request already pending",
+      pending: true,
+      hangout: toHangoutSummary(refreshed || doc, {
+        includeSharedLocations: true,
+        viewerId: me,
+      }),
+    });
+  }
   if (!alreadyJoined && doc.maxAttendees && doc.attendeeIds.length >= doc.maxAttendees) {
     return res.status(409).json({ message: "Hangout is full" });
+  }
+  const joinPolicy = doc.joinPolicy || "open";
+
+  if (!alreadyJoined && !isCreator && joinPolicy === "approval") {
+    const requestedAt = new Date();
+    const updated = await Hangout.findByIdAndUpdate(
+      id,
+      { $push: { pendingJoinRequests: { userId: me, requestedAt } } },
+      { new: true }
+    )
+      .populate("creatorId", "username displayName avatarUrl")
+      .populate("attendeeIds", "username displayName avatarUrl")
+      .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
+
+    const io = getIO();
+    if (io) io.emit("hangout:update", { hangoutId: id, pendingJoinRequest: true });
+
+    return res.json({
+      pending: true,
+      hangout: toHangoutSummary(updated, { includeSharedLocations: true, viewerId: me }),
+    });
   }
 
   const updated = await Hangout.findByIdAndUpdate(
     id,
-    { $addToSet: { attendeeIds: me } },
+    {
+      $addToSet: { attendeeIds: me },
+      $pull: { pendingJoinRequests: { userId: me } },
+    },
     { new: true }
   )
-    .populate("creatorId", "username avatarUrl")
-    .populate("attendeeIds", "username avatarUrl");
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl")
+    .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
 
   const chat = await Chat.findOne({ type: "hangout", hangoutId: id });
   if (chat) {
@@ -280,7 +421,102 @@ router.post("/:id/join", authRequired, async (req, res) => {
   const io = getIO();
   if (io) io.emit("hangout:update", { hangoutId: id });
 
-  res.json({ hangout: toHangoutSummary(updated, { includeSharedLocations: true }) });
+  res.json({ hangout: toHangoutSummary(updated, { includeSharedLocations: true, viewerId: me }) });
+});
+
+// POST /hangouts/:id/join-requests/:userId/accept
+router.post("/:id/join-requests/:userId/accept", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { id, userId } = req.params;
+  if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(userId)) {
+    return res.status(400).json({ message: "Invalid id" });
+  }
+  const doc = await Hangout.findById(id);
+  if (!doc) return res.status(404).json({ message: "Hangout not found" });
+  if (String(doc.creatorId) !== String(me)) {
+    return res.status(403).json({ message: "Only creator can approve requests" });
+  }
+  const hasRequest = (doc.pendingJoinRequests || []).some(
+    (entry) => String(entry?.userId || "") === String(userId)
+  );
+  if (!hasRequest) {
+    return res.status(404).json({ message: "Join request not found" });
+  }
+  if (doc.maxAttendees && doc.attendeeIds.length >= doc.maxAttendees) {
+    return res.status(409).json({ message: "Hangout is full" });
+  }
+
+  const updated = await Hangout.findByIdAndUpdate(
+    id,
+    {
+      $addToSet: { attendeeIds: userId },
+      $pull: { pendingJoinRequests: { userId } },
+      $push: {
+        approvedJoinEvents: {
+          userId,
+          approvedById: me,
+          approvedAt: new Date(),
+        },
+      },
+    },
+    { new: true }
+  )
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl")
+    .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
+
+  const chat = await Chat.findOne({ type: "hangout", hangoutId: id });
+  if (chat) {
+    await Chat.updateOne({ _id: chat._id }, { $addToSet: { members: userId } });
+  }
+
+  const io = getIO();
+  if (io) io.emit("hangout:update", { hangoutId: id });
+  emitToUser(userId, "hangout_join_request:accepted", {
+    hangoutId: String(id),
+    requestUserId: String(userId),
+    creatorId: String(me),
+  });
+  res.json({
+    ok: true,
+    hangout: toHangoutSummary(updated, { includeSharedLocations: true, viewerId: me }),
+  });
+});
+
+// POST /hangouts/:id/join-requests/:userId/decline
+router.post("/:id/join-requests/:userId/decline", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { id, userId } = req.params;
+  if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(userId)) {
+    return res.status(400).json({ message: "Invalid id" });
+  }
+  const doc = await Hangout.findById(id);
+  if (!doc) return res.status(404).json({ message: "Hangout not found" });
+  if (String(doc.creatorId) !== String(me)) {
+    return res.status(403).json({ message: "Only creator can decline requests" });
+  }
+  const hasRequest = (doc.pendingJoinRequests || []).some(
+    (entry) => String(entry?.userId || "") === String(userId)
+  );
+  if (!hasRequest) {
+    return res.status(404).json({ message: "Join request not found" });
+  }
+
+  const updated = await Hangout.findByIdAndUpdate(
+    id,
+    { $pull: { pendingJoinRequests: { userId } } },
+    { new: true }
+  )
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl")
+    .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
+
+  const io = getIO();
+  if (io) io.emit("hangout:update", { hangoutId: id });
+  res.json({
+    ok: true,
+    hangout: toHangoutSummary(updated, { includeSharedLocations: true, viewerId: me }),
+  });
 });
 
 // POST /hangouts/:id/leave
@@ -304,8 +540,8 @@ router.post("/:id/leave", authRequired, async (req, res) => {
     { $pull: { attendeeIds: me, sharedLocations: { userId: me } } },
     { new: true }
   )
-    .populate("creatorId", "username avatarUrl")
-    .populate("attendeeIds", "username avatarUrl");
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl");
 
   const chat = await Chat.findOne({ type: "hangout", hangoutId: id });
   if (chat) {
@@ -316,7 +552,82 @@ router.post("/:id/leave", authRequired, async (req, res) => {
   const io = getIO();
   if (io) io.emit("hangout:update", { hangoutId: id });
 
-  res.json({ hangout: toHangoutSummary(updated, { includeSharedLocations: true }) });
+  res.json({ hangout: toHangoutSummary(updated, { includeSharedLocations: true, viewerId: me }) });
+});
+
+// POST /hangouts/:id/remove-attendee  { userId }
+router.post("/:id/remove-attendee", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { id } = req.params;
+  const { userId } = req.body || {};
+
+  if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(userId)) {
+    return res.status(400).json({ message: "Invalid id" });
+  }
+
+  const doc = await Hangout.findById(id);
+  if (!doc) return res.status(404).json({ message: "Hangout not found" });
+  if (String(doc.creatorId) !== String(me)) {
+    return res.status(403).json({ message: "Only creator can remove attendees" });
+  }
+  if (String(userId) === String(me)) {
+    return res.status(400).json({ message: "Creator cannot remove themselves" });
+  }
+
+  const isAttendee = (doc.attendeeIds || []).some((uid) => String(uid) === String(userId));
+  if (!isAttendee) {
+    await doc.populate("creatorId", "username displayName avatarUrl");
+    await doc.populate("attendeeIds", "username displayName avatarUrl");
+    await doc.populate("pendingJoinRequests.userId", "username displayName avatarUrl");
+    return res.json({
+      ok: true,
+      removedAlready: true,
+      hangout: toHangoutSummary(doc, { includeSharedLocations: true, viewerId: me }),
+    });
+  }
+
+  const updated = await Hangout.findByIdAndUpdate(
+    id,
+    {
+      $pull: {
+        attendeeIds: userId,
+        sharedLocations: { userId },
+        pendingJoinRequests: { userId },
+      },
+    },
+    { new: true }
+  )
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl")
+    .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
+
+  const chat = await Chat.findOne({ type: "hangout", hangoutId: id });
+  if (chat) {
+    await Chat.updateOne({ _id: chat._id }, { $pull: { members: userId } });
+    await ChatSetting.deleteOne({ chatId: chat._id, userId });
+  }
+
+  if (chat) {
+    try {
+      const [creatorUser, removedUser] = await Promise.all([
+        User.findById(me).select("username displayName"),
+        User.findById(userId).select("username displayName"),
+      ]);
+      const creatorName =
+        creatorUser?.displayName || creatorUser?.username || "Creator";
+      const removedName =
+        removedUser?.displayName || removedUser?.username || "User";
+      const systemText = `${creatorName} removed ${removedName} from the chat and hangout.`;
+      await emitSystemMessage(chat._id, me, systemText);
+    } catch (err) {
+      console.error("Failed to emit hangout removal system message:", err);
+    }
+  }
+
+  const io = getIO();
+  if (io) io.emit("hangout:update", { hangoutId: id, attendeeRemovedUserId: String(userId) });
+
+  res.json({ ok: true, hangout: toHangoutSummary(updated, { includeSharedLocations: true, viewerId: me }) });
 });
 
 // DELETE /hangouts/:id
@@ -366,7 +677,16 @@ router.patch("/:id", authRequired, async (req, res) => {
     return res.status(403).json({ message: "Only creator can edit" });
   }
 
-  const { title, description, visibility, location, lng, lat } = req.body;
+  const {
+    title,
+    description,
+    visibility,
+    location,
+    lng,
+    lat,
+    anyoneCanJoin,
+    joinPolicy: requestedJoinPolicy,
+  } = req.body;
   const prevTitle = doc.title;
   if (title !== undefined) {
     if (!title || !title.trim()) {
@@ -382,6 +702,11 @@ router.patch("/:id", authRequired, async (req, res) => {
       return res.status(400).json({ message: "Invalid visibility" });
     }
     doc.visibility = visibility;
+  }
+  if (requestedJoinPolicy !== undefined || anyoneCanJoin !== undefined) {
+    doc.joinPolicy = normalizeJoinPolicy(
+      requestedJoinPolicy !== undefined ? requestedJoinPolicy : anyoneCanJoin
+    );
   }
 
   if (location || lng !== undefined || lat !== undefined) {
@@ -417,8 +742,8 @@ router.patch("/:id", authRequired, async (req, res) => {
   }
 
   await doc.save();
-  await doc.populate("creatorId", "username avatarUrl");
-  await doc.populate("attendeeIds", "username avatarUrl");
+  await doc.populate("creatorId", "username displayName avatarUrl");
+  await doc.populate("attendeeIds", "username displayName avatarUrl");
 
   if (prevTitle !== doc.title) {
     await Chat.updateOne(
@@ -430,7 +755,7 @@ router.patch("/:id", authRequired, async (req, res) => {
   const io = getIO();
   if (io) io.emit("hangout:update", { hangoutId: id });
 
-  res.json({ hangout: toHangoutSummary(doc, { includeSharedLocations: true }) });
+  res.json({ hangout: toHangoutSummary(doc, { includeSharedLocations: true, viewerId: me }) });
 });
 
 // PATCH /hangouts/:id/share-location  { lng, lat }
@@ -472,8 +797,8 @@ router.patch("/:id/share-location", authRequired, async (req, res) => {
     { $set: setPatch },
     { new: true }
   )
-    .populate("creatorId", "username avatarUrl")
-    .populate("attendeeIds", "username avatarUrl");
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl");
 
   if (!updated) {
     updated = await Hangout.findByIdAndUpdate(
@@ -490,14 +815,14 @@ router.patch("/:id/share-location", authRequired, async (req, res) => {
       },
       { new: true }
     )
-      .populate("creatorId", "username avatarUrl")
-      .populate("attendeeIds", "username avatarUrl");
+      .populate("creatorId", "username displayName avatarUrl")
+      .populate("attendeeIds", "username displayName avatarUrl");
   }
 
   const io = getIO();
   if (io) io.emit("hangout:update", { hangoutId: id });
 
-  res.json({ hangout: toHangoutSummary(updated, { includeSharedLocations: true }) });
+  res.json({ hangout: toHangoutSummary(updated, { includeSharedLocations: true, viewerId: me }) });
 });
 
 // PATCH /hangouts/:id/share-location/note  { note }
@@ -519,8 +844,8 @@ router.patch("/:id/share-location/note", authRequired, async (req, res) => {
     { $set: { "sharedLocations.$.note": note } },
     { new: true }
   )
-    .populate("creatorId", "username avatarUrl")
-    .populate("attendeeIds", "username avatarUrl");
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl");
 
   if (!updated) {
     return res.status(400).json({ message: "Location sharing not enabled" });
@@ -529,7 +854,7 @@ router.patch("/:id/share-location/note", authRequired, async (req, res) => {
   const io = getIO();
   if (io) io.emit("hangout:update", { hangoutId: id });
 
-  res.json({ hangout: toHangoutSummary(updated, { includeSharedLocations: true }) });
+  res.json({ hangout: toHangoutSummary(updated, { includeSharedLocations: true, viewerId: me }) });
 });
 
 // POST /hangouts/:id/share-location/stop
@@ -546,15 +871,15 @@ router.post("/:id/share-location/stop", authRequired, async (req, res) => {
     { $pull: { sharedLocations: { userId: me } } },
     { new: true }
   )
-    .populate("creatorId", "username avatarUrl")
-    .populate("attendeeIds", "username avatarUrl");
+    .populate("creatorId", "username displayName avatarUrl")
+    .populate("attendeeIds", "username displayName avatarUrl");
 
   if (!updated) return res.status(404).json({ message: "Hangout not found" });
 
   const io = getIO();
   if (io) io.emit("hangout:update", { hangoutId: id });
 
-  res.json({ hangout: toHangoutSummary(updated, { includeSharedLocations: true }) });
+  res.json({ hangout: toHangoutSummary(updated, { includeSharedLocations: true, viewerId: me }) });
 });
 
 module.exports = router;

@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { chatsApi } from "../../api/chats.api";
+import { markChatRead, useChatsStore } from "../../store/chatsStore";
 
 export default function useChatsData({
   accessToken,
@@ -7,8 +8,10 @@ export default function useChatsData({
   selectedChatId,
   setSelectedChatId,
   navigate,
+  keepSelectedWhenMissing = false,
+  userId,
 }) {
-  const [chats, setChats] = useState([]);
+  const { chats, setChats } = useChatsStore(userId);
 
   const loadChats = useCallback(async () => {
     const data = await chatsApi.list(accessToken);
@@ -18,6 +21,7 @@ export default function useChatsData({
       ? data.chats.some((c) => String(c._id) === String(selectedChatId))
       : false;
     if (selectedChatId && !hasSelected) {
+      if (keepSelectedWhenMissing) return;
       if (data.chats.length) {
         const nextId = String(data.chats[0]._id);
         setSelectedChatId(nextId);
@@ -34,7 +38,14 @@ export default function useChatsData({
       setSelectedChatId(nextId);
       navigate(`/app/chats/${nextId}`, { replace: true });
     }
-  }, [accessToken, navigate, routeChatId, selectedChatId, setSelectedChatId]);
+  }, [
+    accessToken,
+    keepSelectedWhenMissing,
+    navigate,
+    routeChatId,
+    selectedChatId,
+    setSelectedChatId,
+  ]);
 
   const togglePin = useCallback(
     async (c) => {
@@ -67,5 +78,6 @@ export default function useChatsData({
     loadChats,
     togglePin,
     deleteChat,
+    markChatRead,
   };
 }

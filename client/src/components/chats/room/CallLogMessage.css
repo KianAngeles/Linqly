@@ -1,0 +1,69 @@
+.call-log-bubble {
+  min-width: 188px;
+  max-width: 260px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  color: #111827;
+}
+
+.call-log-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.call-log-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid #d1d5db;
+}
+
+.call-log-icon.is-missed {
+  border-color: #ff3b30;
+}
+
+.call-log-icon.is-completed {
+  border-color: #9ca3af;
+}
+
+.call-log-icon img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.call-log-title {
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.call-log-subtitle {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.call-log-callback-btn {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #f3f4f6;
+  color: #111827;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.call-log-callback-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}

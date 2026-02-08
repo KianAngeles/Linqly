@@ -151,6 +151,22 @@ export const messagesApi = {
     return data;
   },
 
+  async sendCallLog(accessToken, chatId, callStatus, durationSec = 0, callType = "audio") {
+    const r = await fetch(`${API}/messages/call-log`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      credentials: "include",
+      body: JSON.stringify({ chatId, callType, callStatus, durationSec }),
+    });
+
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || "Failed to send call log");
+    return data;
+  },
+
   async downloadFile(accessToken, messageId) {
     const r = await fetch(`${API}/messages/${messageId}/download`, {
       headers: { Authorization: `Bearer ${accessToken}` },

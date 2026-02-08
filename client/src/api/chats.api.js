@@ -196,4 +196,14 @@ export const chatsApi = {
     if (!r.ok) throw new Error(data.message || "Failed to load reads");
     return data;
   },
+
+  async getOngoingCallState(accessToken, chatId) {
+    const r = await fetch(`${API}/chats/${chatId}/ongoing-call`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "include",
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || "Failed to load ongoing call");
+    return data;
+  },
 };

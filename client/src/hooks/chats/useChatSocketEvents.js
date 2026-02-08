@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { chatsApi } from "../../api/chats.api";
 import { socket } from "../../socket";
+import { GROUP_CALLS_ENABLED } from "../../constants/featureFlags";
 
 export default function useChatSocketEvents({
   accessToken,
@@ -219,4 +220,63 @@ export default function useChatSocketEvents({
     socket.on("message:deleted", onDeleted);
     return () => socket.off("message:deleted", onDeleted);
   }, [selectedChatId, setMessages]);
+
+  useEffect(() => {
+    if (!GROUP_CALLS_ENABLED) return;
+    const applyOngoingCall = (chatId, ongoingCall) => {
+      if (!chatId) return;
+      const chatKey = String(chatId);
+      setChats((prev) =>
+        prev.map((chat) =>
+          String(chat._id) === chatKey
+            ? {
+                ...chat,
+                ongoingCall: ongoingCall || null,
+              }
+            : chat
+        )
+      );
+      if (String(selectedChatId) === chatKey) {
+        setGroupSettings((prev) =>
+          prev
+            ? {
+                ...prev,
+                ongoingCall: ongoingCall || null,
+              }
+            : prev
+        );
+      }
+    };
+
+    const onGroupCallStarted = (payload) => {
+      applyOngoingCall(payload?.chatId, {
+        callId: payload?.callId || "",
+        callType: payload?.callType || "audio",
+        startedByUserId: payload?.startedByUserId || "",
+        startedByName: payload?.startedByName || "Unknown",
+        startedAt: payload?.startedAt || new Date().toISOString(),
+        participantCount: payload?.participantCount || 0,
+        participantUserIds: (payload?.participants || []).map((p) => p.userId),
+        participantNames: (payload?.participants || []).map((p) => p.name || "Unknown"),
+      });
+    };
+
+    const onGroupCallUpdated = (payload) => {
+      onGroupCallStarted(payload);
+    };
+
+    const onGroupCallEnded = (payload) => {
+      applyOngoingCall(payload?.chatId, null);
+    };
+
+    socket.on("group_call:started", onGroupCallStarted);
+    socket.on("group_call:updated", onGroupCallUpdated);
+    socket.on("group_call:ended", onGroupCallEnded);
+
+    return () => {
+      socket.off("group_call:started", onGroupCallStarted);
+      socket.off("group_call:updated", onGroupCallUpdated);
+      socket.off("group_call:ended", onGroupCallEnded);
+    };
+  }, [selectedChatId, setChats, setGroupSettings]);
 }

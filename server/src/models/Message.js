@@ -7,7 +7,7 @@ const messageSchema = new mongoose.Schema(
 
     type: {
       type: String,
-      enum: ["text", "system", "image", "video", "file", "audio"],
+      enum: ["text", "system", "image", "video", "file", "audio", "call_log"],
       default: "text",
     },
 
@@ -37,6 +37,9 @@ const messageSchema = new mongoose.Schema(
         userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
       },
     ],
+    // Mixed is required for group call logs because they include additional
+    // metadata (scope, status, participants, starter info, etc.).
+    meta: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true }
 );

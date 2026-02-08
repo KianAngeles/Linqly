@@ -1,0 +1,112 @@
+.group-call-log-bubble {
+  min-width: 210px;
+  max-width: 290px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  color: #111827;
+}
+
+.group-call-log-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.group-call-log-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d1d5db;
+}
+
+.group-call-log-icon img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.group-call-log-title {
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.group-call-log-subline {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.group-call-log-join-btn {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #f3f4f6;
+  color: #111827;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.group-call-log-join-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.group-call-header-banner {
+  margin-top: 8px;
+  border: 1px solid #d1fae5;
+  background: #ecfdf5;
+  color: #065f46;
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.group-call-header-banner-text {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-call-header-banner-btn {
+  border: 1px solid #10b981;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #10b981;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.group-call-admin-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-call-admin-btn {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e6e8ec;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.group-call-admin-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
