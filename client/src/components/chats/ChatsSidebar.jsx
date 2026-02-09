@@ -330,7 +330,13 @@ export default function ChatsSidebar({
                     <hr className="dropdown-divider" />
                   </li>
                   <li>
-                    <button className="dropdown-item text-danger" onClick={() => onDeleteChat(c)}>
+                    <button
+                      className="dropdown-item text-danger"
+                      onClick={(event) => {
+                        onDeleteChat(c);
+                        closeDropdown(event);
+                      }}
+                    >
                       Delete
                     </button>
                   </li>

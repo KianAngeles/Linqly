@@ -264,6 +264,14 @@ export function useNotificationsDropdownData({
       }
       if (event.type === "clear_read") {
         setNotifications((prev) => prev.filter((item) => item.isRead === false));
+        return;
+      }
+      if (event.type === "dismiss") {
+        const id = String(event.payload?.id || "");
+        if (!id) return;
+        setNotifications((prev) =>
+          prev.filter((item) => String(item._id) !== id)
+        );
       }
     });
     return unsubscribe;
@@ -431,6 +439,21 @@ export function useNotificationsDropdownData({
       notificationsApi.clearRead(accessToken, readIds).catch(() => {});
     }
     emitNotificationSync({ type: "clear_read" });
+  }, [accessToken]);
+
+  const dismissNotification = useCallback((notificationId) => {
+    const id = String(notificationId || "");
+    if (!id) return;
+    localReadNotificationIds.add(id);
+    localHiddenNotificationIds.add(id);
+    setNotifications((prev) =>
+      prev.filter((item) => String(item._id) !== id)
+    );
+    if (accessToken) {
+      notificationsApi.markRead(accessToken, id).catch(() => {});
+      notificationsApi.clearRead(accessToken, [id]).catch(() => {});
+    }
+    emitNotificationSync({ type: "dismiss", payload: { id } });
   }, [accessToken]);
 
   const handleNotificationRowClick = useCallback(
@@ -670,6 +693,7 @@ export function useNotificationsDropdownData({
     handleHangoutJoinRequestAction,
     markAllRead,
     clearRead,
+    dismissNotification,
     reloadNotifications: loadNotifications,
   };
 }

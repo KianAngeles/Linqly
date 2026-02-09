@@ -66,6 +66,7 @@ export default function HeaderBar() {
     bannerNotification,
     isBannerVisible,
     dismissBanner,
+    dismissNotification,
     handleNotificationRowClick,
     handleJoinGroupCallFromNotification,
     handleFriendRequestAction,
@@ -450,6 +451,7 @@ export default function HeaderBar() {
                 onFriendRequestAction={handleFriendRequestAction}
                 onHangoutJoinRequestAction={handleHangoutJoinRequestAction}
                 onJoinGroupCall={handleJoinGroupCallFromNotification}
+                onDismissNotification={dismissNotification}
                 emptyText="No notifications yet"
               />
 

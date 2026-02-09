@@ -275,8 +275,9 @@
 }
 
 .app-header {
-  position: relative;
-  z-index: 30;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .app-header .avatar-pill {
@@ -720,7 +721,7 @@
 
 .app-header-notification-row {
   display: grid;
-  grid-template-columns: 50px minmax(0, 1fr);
+  grid-template-columns: 50px minmax(0, 1fr) auto;
   align-items: start;
   gap: 12px;
   padding: 12px 14px;
@@ -729,6 +730,20 @@
 
 .app-header-notification-row:hover {
   background: #f8f9fa;
+}
+
+.app-header-notification-row.is-unread {
+  background: #f4f6f8;
+  box-shadow: inset 3px 0 0 #111827;
+}
+
+.app-header-notification-row.is-unread .app-header-notification-name {
+  font-weight: 700;
+}
+
+.app-header-notification-row.is-unread .app-header-notification-message {
+  color: #1f2937;
+  font-weight: 600;
 }
 
 .app-header-notification-avatar {
@@ -785,6 +800,37 @@
 
 .app-header-notification-actions .btn {
   white-space: nowrap;
+}
+
+.app-header-notification-dismiss {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 16px;
+  line-height: 1;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.app-header-notification-dismiss:hover,
+.app-header-notification-dismiss:focus {
+  background: #f1f5f9;
+  color: #111827;
+}
+
+.app-header-notification-row:hover .app-header-notification-dismiss,
+.app-header-notification-dismiss:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .app-header-notification-action-btn {

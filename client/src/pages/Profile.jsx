@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { useAuth } from "../store/AuthContext";
 import { friendsApi } from "../api/friends.api";
 import { hangoutsApi } from "../api/hangouts.api";
@@ -24,6 +26,17 @@ import checkedIcon from "../assets/icons/profile-icons/checked.png";
 import sparklerIcon from "../assets/icons/profile-icons/sparkler.png";
 import trashIcon from "../assets/icons/profile-icons/trash.png";
 import whiteDropdownIcon from "../assets/icons/white-dropdown.png";
+
+const PROFILE_MAP_FALLBACK_CENTER = { lng: 120.9842, lat: 14.5995 };
+const CLOSED_HANGOUT_STATUSES = new Set([
+  "closed",
+  "ended",
+  "completed",
+  "cancelled",
+  "canceled",
+  "done",
+  "inactive",
+]);
 
 export default function Profile() {
   const { user: viewer, accessToken, setUser } = useAuth();
@@ -68,6 +81,11 @@ export default function Profile() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState("");
   const [profileNotFound, setProfileNotFound] = useState(false);
+  const [mapPreviewLoaded, setMapPreviewLoaded] = useState(false);
+  const mapPreviewContainerRef = useRef(null);
+  const mapPreviewRef = useRef(null);
+  const mapPreviewMarkersRef = useRef([]);
+  const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN || "", []);
 
   const normalizedUsername = useMemo(() => {
     return String(usernameParam || "")
@@ -187,6 +205,53 @@ export default function Profile() {
       .join("|");
   };
 
+  const resolveHangoutCoords = (hangout) => {
+    const coords =
+      hangout?.location?.coordinates ||
+      hangout?.location?.coords ||
+      hangout?.coordinates ||
+      null;
+    if (Array.isArray(coords) && coords.length >= 2) {
+      const lng = Number(coords[0]);
+      const lat = Number(coords[1]);
+      if (Number.isFinite(lng) && Number.isFinite(lat)) return [lng, lat];
+    }
+    const lng = Number(
+      hangout?.location?.lng ??
+        hangout?.location?.longitude ??
+        hangout?.lng ??
+        hangout?.longitude
+    );
+    const lat = Number(
+      hangout?.location?.lat ??
+        hangout?.location?.latitude ??
+        hangout?.lat ??
+        hangout?.latitude
+    );
+    if (Number.isFinite(lng) && Number.isFinite(lat)) return [lng, lat];
+    return null;
+  };
+
+  const isHangoutOngoing = (hangout) => {
+    if (hangout?.ongoing === true) return true;
+    if (String(hangout?.status || "").toLowerCase() === "ongoing") return true;
+    const startsAt = hangout?.startsAt ? new Date(hangout.startsAt).getTime() : NaN;
+    const endsAt = hangout?.endsAt ? new Date(hangout.endsAt).getTime() : NaN;
+    const now = Date.now();
+    if (!Number.isNaN(startsAt) && !Number.isNaN(endsAt)) {
+      return now >= startsAt && now <= endsAt;
+    }
+    return false;
+  };
+
+  const isHangoutClosed = (hangout) => {
+    if (!hangout || typeof hangout !== "object") return true;
+    const status = String(hangout.status || "").toLowerCase().trim();
+    if (CLOSED_HANGOUT_STATUSES.has(status)) return true;
+    const endsAtMs = hangout?.endsAt ? new Date(hangout.endsAt).getTime() : NaN;
+    if (Number.isFinite(endsAtMs) && endsAtMs < new Date().getTime()) return true;
+    return false;
+  };
 
   const profile = useMemo(() => {
     const displayName =
@@ -253,6 +318,7 @@ export default function Profile() {
   const isPreviewingOwn = isOwnProfile && previewMode;
   const isOwnerView = isOwnProfile && !isPreviewingOwn;
   const isPrivacyNoticeMode = isViewingOther || isPreviewingOwn;
+  const isHangoutsTabActive = activeTab === "hangouts";
   const isFriendViewer = profileUser?.relationship === "friends";
   const privacy = isOwnProfile
     ? viewer?.privacy || profileUser?.privacy || {}
@@ -479,6 +545,119 @@ export default function Profile() {
       : "Joined hangouts are private.";
   const activeEmptyLabel =
     hangoutsView === "created" ? "No created hangouts yet." : "No joined hangouts yet.";
+  const canViewActiveHangouts = isOwnerView
+    || (isPreviewingOwn
+      ? canSee(activePrivacy, previewAudience)
+      : canViewByPrivacy(activePrivacy));
+
+  const mapPreviewPins = useMemo(() => {
+    return activeHangouts
+      .map((hangout) => {
+        const point = resolveHangoutCoords(hangout);
+        if (!point) return null;
+        return {
+          id: String(hangout?._id || ""),
+          point,
+          isClosed: isHangoutClosed(hangout),
+          isLive: isHangoutOngoing(hangout),
+        };
+      })
+      .filter(Boolean);
+  }, [activeHangouts]);
+
+  const mapPreviewHasPins = mapPreviewPins.length > 0;
+
+  useEffect(() => {
+    if (!mapboxToken) return;
+    mapboxgl.accessToken = mapboxToken;
+  }, [mapboxToken]);
+
+  useEffect(() => {
+    if (!mapboxToken || !canViewActiveHangouts || !isHangoutsTabActive) return;
+    if (!mapPreviewContainerRef.current || mapPreviewRef.current) return;
+
+    const map = new mapboxgl.Map({
+      container: mapPreviewContainerRef.current,
+      style: "mapbox://styles/mapbox/light-v11",
+      center: [PROFILE_MAP_FALLBACK_CENTER.lng, PROFILE_MAP_FALLBACK_CENTER.lat],
+      zoom: 1.6,
+      interactive: false,
+      attributionControl: true,
+    });
+
+    map.scrollZoom.disable();
+    map.dragPan.disable();
+    map.doubleClickZoom.disable();
+    map.touchZoomRotate.disable();
+    map.keyboard.disable();
+
+    map.on("load", () => {
+      setMapPreviewLoaded(true);
+    });
+
+    mapPreviewRef.current = map;
+
+    return () => {
+      setMapPreviewLoaded(false);
+      mapPreviewMarkersRef.current.forEach((marker) => marker.remove());
+      mapPreviewMarkersRef.current = [];
+      mapPreviewRef.current = null;
+      map.remove();
+    };
+  }, [mapboxToken, canViewActiveHangouts, isHangoutsTabActive]);
+
+  useEffect(() => {
+    if (!mapPreviewRef.current || !mapPreviewLoaded) return;
+
+    mapPreviewMarkersRef.current.forEach((marker) => marker.remove());
+    mapPreviewMarkersRef.current = [];
+
+    if (!mapPreviewHasPins) {
+      mapPreviewRef.current.jumpTo({
+        center: [PROFILE_MAP_FALLBACK_CENTER.lng, PROFILE_MAP_FALLBACK_CENTER.lat],
+        zoom: 1.6,
+      });
+      return;
+    }
+
+    const bounds = new mapboxgl.LngLatBounds(
+      mapPreviewPins[0].point,
+      mapPreviewPins[0].point
+    );
+
+    mapPreviewPins.forEach((pin) => {
+      bounds.extend(pin.point);
+      const markerEl = document.createElement("div");
+      markerEl.className = [
+        "profile-map-pin",
+        hangoutsView === "created" ? "profile-map-pin-created" : "profile-map-pin-joined",
+        pin.isClosed ? "is-closed" : "",
+        pin.isLive ? "is-live" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      mapPreviewMarkersRef.current.push(
+        new mapboxgl.Marker({ element: markerEl, anchor: "center" })
+          .setLngLat(pin.point)
+          .addTo(mapPreviewRef.current)
+      );
+    });
+
+    mapPreviewRef.current.fitBounds(bounds, {
+      padding: 42,
+      maxZoom: 12,
+      duration: 0,
+    });
+  }, [hangoutsView, mapPreviewHasPins, mapPreviewLoaded, mapPreviewPins]);
+
+  const openMapPreview = () => {
+    const userId = profile.id || profileUser?.id || "";
+    const params = new URLSearchParams();
+    params.set("scope", "profile");
+    if (userId) params.set("userId", userId);
+    params.set("show", hangoutsView === "created" ? "created" : "joined");
+    navigate(`/app/map?${params.toString()}`);
+  };
 
   useEffect(() => {
     setCreatedHangoutsPage(1);
@@ -1736,8 +1915,74 @@ export default function Profile() {
               ) : (
                 <>
                             <div className="profile-card">
-                <h5 className="fw-semibold mb-3">Map Preview</h5>
-                <div className="profile-map-placeholder">Map preview</div>
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <div>
+                    <h5 className="fw-semibold mb-1">Map Preview</h5>
+                    <div className="profile-map-subtitle">Your Hangout Footprint</div>
+                  </div>
+                </div>
+                {!canViewActiveHangouts ? (
+                  <div className="text-muted small">{activePrivateLabel}</div>
+                ) : (
+                  <div
+                    className="profile-map-preview"
+                    role="button"
+                    tabIndex={0}
+                    onClick={openMapPreview}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openMapPreview();
+                      }
+                    }}
+                    aria-label="Open full map view"
+                  >
+                    <div
+                      ref={mapPreviewContainerRef}
+                      className="profile-map-canvas"
+                    />
+                    {!mapPreviewHasPins && (
+                      <div className="profile-map-empty" role="presentation">
+                        <div className="profile-map-empty-icon" aria-hidden="true">
+                          <svg
+                            viewBox="0 0 24 24"
+                            width="22"
+                            height="22"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M12 21s7-7.2 7-11.4A7 7 0 0 0 5 9.6C5 13.8 12 21 12 21Z" />
+                            <circle cx="12" cy="9.6" r="2.6" />
+                          </svg>
+                        </div>
+                        <div className="profile-map-empty-title">No hangouts yet</div>
+                        <div className="profile-map-empty-text">
+                          Hangouts you create or join will appear here.
+                        </div>
+                        {isOwnerView && (
+                          <button
+                            type="button"
+                            className="btn btn-outline-dark btn-sm profile-map-empty-cta"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate("/app/map");
+                            }}
+                          >
+                            Create a hangout
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!mapboxToken && canViewActiveHangouts && (
+                  <div className="text-muted small mt-2">
+                    Missing Mapbox token. Set <code>VITE_MAPBOX_TOKEN</code>.
+                  </div>
+                )}
               </div>
               <div className="profile-card">
                 <div className="d-flex align-items-center justify-content-between mb-3">

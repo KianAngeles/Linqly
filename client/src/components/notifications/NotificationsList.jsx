@@ -12,6 +12,7 @@ export default function NotificationsList({
   onFriendRequestAction,
   onHangoutJoinRequestAction,
   onJoinGroupCall,
+  onDismissNotification,
   emptyText = "No notifications yet",
   className = "",
 }) {
@@ -52,7 +53,9 @@ export default function NotificationsList({
             key={notification._id}
             role="button"
             tabIndex={0}
-            className="app-header-notification-row"
+            className={`app-header-notification-row ${
+              notification?.isRead === false ? "is-unread" : ""
+            }`.trim()}
             onClick={() => onRowClick?.(notification)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -150,6 +153,19 @@ export default function NotificationsList({
                 </div>
               )}
             </div>
+            {onDismissNotification && (
+              <button
+                type="button"
+                className="app-header-notification-dismiss"
+                aria-label="Delete notification"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDismissNotification(notification._id);
+                }}
+              >
+                x
+              </button>
+            )}
           </div>
         );
       })}

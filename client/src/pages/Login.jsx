@@ -1,13 +1,19 @@
 import { useState } from "react";
 import { useAuth } from "../store/AuthContext";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
+import AuthSplitLayout from "../components/auth/AuthSplitLayout";
 
 export default function Login() {
   const nav = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
+  const transition =
+    location?.state?.fromAuth && location?.state?.direction === "right"
+      ? "right"
+      : "";
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -21,8 +27,14 @@ export default function Login() {
   }
 
   return (
-    <div className="container py-5" style={{ maxWidth: 420 }}>
-      <h3 className="mb-3">Login</h3>
+    <AuthSplitLayout
+      side="left"
+      transition={transition}
+      title="Login"
+      subtitle="Access your account to continue."
+      panelHeading="Welcome back"
+      panelText="Sign in to continue messaging, planning hangouts, and checking updates."
+    >
       {err && <div className="alert alert-danger">{err}</div>}
       <form onSubmit={onSubmit}>
         <div className="mb-3">
@@ -42,14 +54,23 @@ export default function Login() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
-        <button className="btn btn-primary w-100">Sign in</button>
+        <button className="btn btn-auth-primary">Sign in</button>
         <div className="mt-2">
-          <Link to="/forgot-password">Forgot password?</Link>
+          <Link className="auth-inline-link" to="/forgot-password">
+            Forgot password?
+          </Link>
         </div>
       </form>
       <div className="mt-3">
-        No account? <Link to="/register">Register</Link>
+        No account?{" "}
+        <Link
+          className="auth-inline-link"
+          to="/register"
+          state={{ fromAuth: true, direction: "left" }}
+        >
+          Register
+        </Link>
       </div>
-    </div>
+    </AuthSplitLayout>
   );
 }

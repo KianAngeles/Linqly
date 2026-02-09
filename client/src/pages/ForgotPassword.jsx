@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { authApi } from "../api/auth.api";
 import { Link } from "react-router-dom";
+import AuthCardLayout from "../components/auth/AuthCardLayout";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -19,11 +20,18 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="container py-5" style={{ maxWidth: 420 }}>
-      <h3 className="mb-3">Forgot Password</h3>
-      {err && <div className="alert alert-danger">{err}</div>}
+    <AuthCardLayout
+      title="Forgot password"
+      subtitle="Enter your email and we'll send you a reset link."
+      footer={
+        <Link className="auth-card-link" to="/login">
+          Back to login
+        </Link>
+      }
+    >
+      {err && <div className="auth-card-notice is-error">{err}</div>}
       {done ? (
-        <div className="alert alert-success">
+        <div className="auth-card-notice">
           If that email exists, a reset link was sent.
         </div>
       ) : (
@@ -32,12 +40,9 @@ export default function ForgotPassword() {
             <label className="form-label">Email</label>
             <input className="form-control" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
-          <button className="btn btn-primary w-100">Send Reset Link</button>
+          <button className="btn auth-card-btn">Send reset link</button>
         </form>
       )}
-      <div className="mt-3">
-        <Link to="/login">Back to login</Link>
-      </div>
-    </div>
+    </AuthCardLayout>
   );
 }

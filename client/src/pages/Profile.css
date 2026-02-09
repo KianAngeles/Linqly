@@ -617,6 +617,118 @@
   color: rgba(15, 23, 42, 0.5);
 }
 
+.profile-map-subtitle {
+  font-size: 0.85rem;
+  color: rgba(15, 23, 42, 0.55);
+}
+
+.profile-map-preview {
+  position: relative;
+  height: 220px;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #f3f4f6;
+  overflow: hidden;
+  box-shadow: 0 16px 28px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+}
+
+.profile-map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.profile-map-canvas .mapboxgl-canvas {
+  filter: grayscale(1) saturate(0) contrast(1.02);
+}
+
+.profile-map-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #111827;
+}
+
+.profile-map-empty-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.profile-map-empty-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.profile-map-empty-text {
+  font-size: 0.85rem;
+  color: rgba(15, 23, 42, 0.6);
+}
+
+.profile-map-empty-cta {
+  margin-top: 6px;
+}
+
+.profile-map-pin {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  position: relative;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+
+.profile-map-pin-created {
+  background: #111827;
+  border: 2px solid #111827;
+}
+
+.profile-map-pin-joined {
+  background: transparent;
+  border: 2px solid #111827;
+}
+
+.profile-map-pin.is-closed {
+  opacity: 0.4;
+}
+
+.profile-map-pin.is-live::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid #111827;
+  transform: translate(-50%, -50%) scale(0.6);
+  opacity: 0.5;
+  animation: profile-map-pulse 1.6s ease-out infinite;
+}
+
+@keyframes profile-map-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.6);
+    opacity: 0;
+  }
+}
+
 .profile-hangout-row {
   display: flex;
   justify-content: space-between;

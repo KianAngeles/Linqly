@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { authApi } from "../api/auth.api";
+import AuthCardLayout from "../components/auth/AuthCardLayout";
 
 export default function ResetPassword() {
   const [params] = useSearchParams();
@@ -28,24 +29,33 @@ export default function ResetPassword() {
   const missing = useMemo(() => !token || !email, [token, email]);
 
   return (
-    <div className="container py-5" style={{ maxWidth: 420 }}>
-      <h3 className="mb-3">Reset Password</h3>
-
+    <AuthCardLayout
+      title="Reset password"
+      subtitle="Create a new password to secure your account."
+      footer={
+        <Link className="auth-card-link" to="/login">
+          Back to login
+        </Link>
+      }
+    >
       {missing && (
-        <div className="alert alert-danger">
+        <div className="auth-card-notice is-error">
           Missing reset token or email. Please request a new reset link.
         </div>
       )}
 
-      {err && <div className="alert alert-danger">{err}</div>}
+      {err && <div className="auth-card-notice is-error">{err}</div>}
 
       {done ? (
-        <div className="alert alert-success">Password updated! Redirecting to login…</div>
+        <div className="auth-card-notice">Password updated! Redirecting to login...</div>
       ) : (
         <form onSubmit={onSubmit}>
-          <div className="mb-2 small text-muted">Email: {email}</div>
           <div className="mb-3">
-            <label className="form-label">New Password</label>
+            <label className="form-label">Email</label>
+            <input className="form-control" value={email} disabled readOnly />
+          </div>
+          <div className="mb-3">
+            <label className="form-label">New password</label>
             <input
               type="password"
               className="form-control"
@@ -54,15 +64,11 @@ export default function ResetPassword() {
               disabled={missing}
             />
           </div>
-          <button className="btn btn-success w-100" disabled={missing}>
-            Update Password
+          <button className="btn auth-card-btn" disabled={missing}>
+            Update password
           </button>
         </form>
       )}
-
-      <div className="mt-3">
-        <Link to="/login">Back to login</Link>
-      </div>
-    </div>
+    </AuthCardLayout>
   );
 }

@@ -65,6 +65,7 @@ export default function Notifications() {
     handleHangoutJoinRequestAction,
     markAllRead,
     clearRead,
+    dismissNotification,
   } = useNotificationsDropdownData({
     accessToken,
     nav,
@@ -193,6 +194,7 @@ export default function Notifications() {
                       onFriendRequestAction={handleFriendRequestAction}
                       onHangoutJoinRequestAction={handleHangoutJoinRequestAction}
                       onJoinGroupCall={handleJoinGroupCallFromNotification}
+                      onDismissNotification={dismissNotification}
                       emptyText=""
                     />
                   </div>

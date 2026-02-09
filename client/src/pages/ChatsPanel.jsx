@@ -95,6 +95,10 @@ export default function ChatsPanel() {
   const [reactionModal, setReactionModal] = useState(null);
   const [unsendModal, setUnsendModal] = useState(null);
   const [leaveGroupModalOpen, setLeaveGroupModalOpen] = useState(false);
+  const [blockModalOpen, setBlockModalOpen] = useState(false);
+  const [blockBusy, setBlockBusy] = useState(false);
+  const [deleteChatTarget, setDeleteChatTarget] = useState(null);
+  const [deleteChatBusy, setDeleteChatBusy] = useState(false);
   const [mediaViewer, setMediaViewer] = useState(null);
   const [nicknameDraft, setNicknameDraft] = useState("");
   const [showFindMessage, setShowFindMessage] = useState(false);
@@ -1809,21 +1813,26 @@ export default function ChatsPanel() {
 
   async function handleToggleBlock() {
     if (!directPeerId) return;
+    setBlockModalOpen(true);
+  }
+
+  async function confirmToggleBlock() {
+    if (!directPeerId || blockBusy) return;
     const nextAction = blockedByMe ? "unblock" : "block";
-    const label = blockedByMe
-      ? "Unblock this user?"
-      : "Block this user? They won't be able to message you.";
-    if (!confirm(label)) return;
     setErr("");
     try {
+      setBlockBusy(true);
       if (nextAction === "block") {
         await friendsApi.block(accessToken, directPeerId);
       } else {
         await friendsApi.unblock(accessToken, directPeerId);
       }
       await loadChats();
+      setBlockModalOpen(false);
     } catch (e) {
       setErr(e.message);
+    } finally {
+      setBlockBusy(false);
     }
   }
 
@@ -1838,8 +1847,16 @@ export default function ChatsPanel() {
   }
 
   async function handleDeleteChat(chat) {
-    const cleared = await deleteChat(chat);
+    setDeleteChatTarget(chat || null);
+  }
+
+  async function confirmDeleteChat() {
+    if (!deleteChatTarget || deleteChatBusy) return;
+    setDeleteChatBusy(true);
+    const cleared = await deleteChat(deleteChatTarget);
     if (cleared) setMessages([]);
+    setDeleteChatTarget(null);
+    setDeleteChatBusy(false);
   }
 
   function handleComposerBlur() {
@@ -2234,6 +2251,102 @@ export default function ChatsPanel() {
       ? selectedChat.avatarUrl
       : `${API_BASE}${selectedChat.avatarUrl}`
     : "";
+
+  const blockModalView = blockModalOpen ? (
+    <div
+      className="chat-mono-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !blockBusy) setBlockModalOpen(false);
+      }}
+    >
+      <div className="chat-mono-modal" role="dialog" aria-modal="true">
+        <div className="chat-mono-header">
+          <div className="chat-mono-title">
+            {blockedByMe ? "Unblock user" : "Block user"}
+          </div>
+          <button
+            type="button"
+            className="chat-mono-close"
+            onClick={() => setBlockModalOpen(false)}
+            disabled={blockBusy}
+            aria-label="Close"
+          >
+            x
+          </button>
+        </div>
+        <div className="chat-mono-body">
+          {blockedByMe
+            ? `Unblock ${directPeerName || "this user"} so they can message you again?`
+            : `Block ${directPeerName || "this user"} so they cannot message you?`}
+        </div>
+        <div className="chat-mono-actions">
+          <button
+            type="button"
+            className="chat-mono-btn chat-mono-btn-ghost"
+            onClick={() => setBlockModalOpen(false)}
+            disabled={blockBusy}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="chat-mono-btn chat-mono-btn-solid"
+            onClick={confirmToggleBlock}
+            disabled={blockBusy}
+          >
+            {blockBusy ? "Working..." : blockedByMe ? "Unblock" : "Block"}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  const deleteChatModalView = deleteChatTarget ? (
+    <div
+      className="chat-mono-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !deleteChatBusy) {
+          setDeleteChatTarget(null);
+        }
+      }}
+    >
+      <div className="chat-mono-modal" role="dialog" aria-modal="true">
+        <div className="chat-mono-header">
+          <div className="chat-mono-title">Delete chat</div>
+          <button
+            type="button"
+            className="chat-mono-close"
+            onClick={() => setDeleteChatTarget(null)}
+            disabled={deleteChatBusy}
+            aria-label="Close"
+          >
+            x
+          </button>
+        </div>
+        <div className="chat-mono-body">
+          Delete this chat from your sidebar? This only removes it for you.
+        </div>
+        <div className="chat-mono-actions">
+          <button
+            type="button"
+            className="chat-mono-btn chat-mono-btn-ghost"
+            onClick={() => setDeleteChatTarget(null)}
+            disabled={deleteChatBusy}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="chat-mono-btn chat-mono-btn-solid"
+            onClick={confirmDeleteChat}
+            disabled={deleteChatBusy}
+          >
+            {deleteChatBusy ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   const typingUsers = useMemo(() => {
     const chatTyping = typingByChat[String(selectedChatId)] || {};
@@ -3046,6 +3159,8 @@ export default function ChatsPanel() {
         {unsendModalView}
         {leaveGroupModalView}
         {removeMemberModal}
+        {blockModalView}
+        {deleteChatModalView}
       {cropPhotoModal}
       {editEmojiModal}
       {mediaViewer?.url && (
