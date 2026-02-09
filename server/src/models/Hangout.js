@@ -39,6 +39,17 @@ const hangoutSchema = new mongoose.Schema(
         note: { type: String, default: "" },
       },
     ],
+    attendeeStatuses: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        status: {
+          type: String,
+          enum: ["Confirmed", "On the way", "Running late", "Arrived", "Waiting"],
+          default: "Confirmed",
+        },
+        updatedAt: { type: Date, default: () => new Date() },
+      },
+    ],
     attendeeIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     pendingJoinRequests: [
       {

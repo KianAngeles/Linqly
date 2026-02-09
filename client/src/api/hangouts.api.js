@@ -185,4 +185,19 @@ export const hangoutsApi = {
     if (!r.ok) throw new Error(data.message || "Failed to update note");
     return data;
   },
+
+  async updateAttendeeStatus(accessToken, hangoutId, status) {
+    const r = await fetch(`${API}/hangouts/${hangoutId}/attendees/me/status`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      credentials: "include",
+      body: JSON.stringify({ status }),
+    });
+    const data = await parseJsonSafe(r);
+    if (!r.ok) throw new Error(data.message || "Failed to update status");
+    return data;
+  },
 };

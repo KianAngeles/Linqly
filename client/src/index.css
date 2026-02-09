@@ -1,9 +1,411 @@
-html,
-body,
-#root {
+/* =========================================================
+   Linqly — Monochrome Design System (Root Styling)
+   Drop into: src/styles/theme.css (then import it in main.jsx)
+   ========================================================= */
+
+/* --------- Google Fonts (requested families) --------- */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800;900&family=Work+Sans:wght@300;400;500;600;700;800&family=Roboto:wght@300;400;500;700;900&display=swap");
+
+/* =========================================================
+   1) Root Tokens — Light Mode (default)
+   ========================================================= */
+:root {
+  /* ----- Fonts (roles) ----- */
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-body: "Work Sans", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-heading: "Poppins", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: "Montserrat", "Poppins", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-fallback: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+
+  /* ----- Monochrome Palette (semantic) ----- */
+  --bg: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-muted: #f6f6f6;
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+
+  --text: #0b0b0f;
+  --text-muted: #5f6368;
+  --text-subtle: #8a9099;
+
+  --border: rgba(0, 0, 0, 0.12);
+  --border-strong: rgba(0, 0, 0, 0.24);
+  --divider: rgba(0, 0, 0, 0.08);
+
+  /* “Accent” stays monochrome (no colors) */
+  --accent: #0b0b0f;
+  --accent-contrast: #ffffff;
+
+  /* Status colors (keep subtle in monochrome) */
+  --success: #137a3a; /* allowed green for success microcopy */
+  --danger: #b42318;  /* muted red for errors */
+  --warning: #9a6700;
+
+  /* ----- Shadows ----- */
+  --shadow-sm: 0 6px 18px rgba(0, 0, 0, 0.10);
+  --shadow-md: 0 12px 34px rgba(0, 0, 0, 0.14);
+  --shadow-lg: 0 18px 60px rgba(0, 0, 0, 0.18);
+
+  /* ----- Radii ----- */
+  --r-xs: 8px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+  --r-pill: 999px;
+
+  /* ----- Spacing ----- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 56px;
+  --space-10: 72px;
+  --shell: 1200px;
+
+  /* ----- Motion ----- */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-inout: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 160ms;
+  --dur-base: 260ms;
+  --dur-slow: 420ms;
+
+  /* ----- Buttons ----- */
+  --btn-h: 44px;
+  --btn-h-lg: 52px;
+  --btn-radius: 12px;
+  --btn-radius-pill: 999px;
+
+  /* Focus ring */
+  --focus-ring: 0 0 0 4px rgba(0, 0, 0, 0.12);
+
+  /* Glass (for translucent header pill, etc.) */
+  --glass-bg: rgba(255, 255, 255, 0.58);
+  --glass-border: rgba(0, 0, 0, 0.10);
+  --glass-blur: 12px;
+}
+
+/* =========================================================
+   2) Dark Mode Tokens
+   Add to <html data-theme="dark"> or body[data-theme="dark"]
+   ========================================================= */
+:root[data-theme="dark"] {
+  --bg: #07070b;
+  --bg-elevated: #0c0c12;
+  --bg-muted: #10101a;
+  --surface: #0c0c12;
+  --surface-2: #12121b;
+
+  --text: #f2f4f7;
+  --text-muted: rgba(242, 244, 247, 0.70);
+  --text-subtle: rgba(242, 244, 247, 0.52);
+
+  --border: rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --divider: rgba(255, 255, 255, 0.08);
+
+  --accent: #ffffff;
+  --accent-contrast: #0b0b0f;
+
+  --shadow-sm: 0 10px 22px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 16px 42px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 22px 70px rgba(0, 0, 0, 0.55);
+
+  --focus-ring: 0 0 0 4px rgba(255, 255, 255, 0.14);
+
+  --glass-bg: rgba(10, 10, 16, 0.56);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-blur: 12px;
+}
+
+/* =========================================================
+   3) Base Reset + Page Defaults
+   ========================================================= */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
   height: 100%;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
+  font-family: var(--font-body);
+  color: var(--text);
+  background: var(--bg);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+img, svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+/* =========================================================
+   4) Typography Scale (use these classes if you want)
+   ========================================================= */
+.h-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+.h-heading {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
+}
+
+.text-ui {
+  font-family: var(--font-ui);
+}
+
+/* Defaults */
+h1, h2, h3, h4 {
+  margin: 0;
+  font-family: var(--font-heading);
+  color: var(--text);
+}
+
+p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.small {
+  font-size: 0.875rem;
+  color: var(--text-subtle);
+}
+
+/* =========================================================
+   5) Layout Helpers
+   ========================================================= */
+.shell {
+  width: min(var(--shell), calc(100% - 48px));
+  margin: 0 auto;
+}
+
+.section {
+  padding: var(--space-10) 0;
+}
+
+.divider {
+  height: 1px;
+  background: var(--divider);
+}
+
+/* =========================================================
+   6) Form Controls (inputs/select/textarea)
+   ========================================================= */
+.input,
+select,
+textarea {
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out);
+}
+
+.input::placeholder,
+textarea::placeholder {
+  color: var(--text-subtle);
+}
+
+.input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--border-strong);
+  box-shadow: var(--focus-ring);
+}
+
+label {
+  display: inline-block;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+/* Helper text (hint/error/success under inputs) */
+.helper {
+  min-height: 18px; /* prevents layout jump */
+  margin-top: 6px;
+  font-size: 0.85rem;
+  font-family: var(--font-ui);
+  color: var(--text-subtle);
+}
+.helper.is-error { color: var(--danger); }
+.helper.is-success { color: var(--success); }
+
+/* =========================================================
+   7) Buttons — Base + Variants
+   Use: .btn .btn-solid / .btn-outline / .btn-ghost
+   ========================================================= */
+.btn {
+  height: var(--btn-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px;
+
+  border-radius: var(--btn-radius);
+  border: 1px solid transparent;
+
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1;
+
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+
+  transition: transform var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-out),
+              opacity var(--dur-fast) var(--ease-out);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Primary (solid) */
+.btn-solid {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: rgba(0, 0, 0, 0.0);
+}
+:root[data-theme="dark"] .btn-solid {
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+.btn-solid:hover {
+  opacity: 0.92;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Outline */
+.btn-outline {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.btn-outline:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+:root[data-theme="dark"] .btn-outline:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Ghost */
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: transparent;
+}
+.btn-ghost:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+:root[data-theme="dark"] .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Sizes */
+.btn-lg {
+  height: var(--btn-h-lg);
+  padding: 0 20px;
+  border-radius: 14px;
+  font-size: 1rem;
+}
+
+.btn-pill {
+  border-radius: var(--btn-radius-pill);
+}
+
+/* Disabled */
+.btn:disabled,
+.btn.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+/* =========================================================
+   8) Cards / Surfaces (optional utilities)
+   ========================================================= */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-flat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: none;
+}
+
+/* Glass pill (for your header) */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-sm);
+}
+
+/* =========================================================
+   9) Motion preferences
+   ========================================================= */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

@@ -408,6 +408,16 @@ io.on("connection", (socket) => {
     socket.join(String(chatId));
   });
 
+  socket.on("hangout:join", ({ hangoutId }) => {
+    if (!hangoutId) return;
+    socket.join(`hangout:${String(hangoutId)}`);
+  });
+
+  socket.on("hangout:leave", ({ hangoutId }) => {
+    if (!hangoutId) return;
+    socket.leave(`hangout:${String(hangoutId)}`);
+  });
+
   socket.on("chat:read", async ({ chatId, lastReadMessageId }) => {
     const userId = socket.data.userId;
     if (!userId || !chatId) return;

@@ -1,5 +1,6 @@
 // src/components/hangouts/HangoutDetailCard.jsx
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import moreIcon from "../../assets/icons/more.png";
 export default function HangoutDetailCard({
   selected,
   currentUserId,
@@ -39,15 +40,23 @@ export default function HangoutDetailCard({
   onToggleShareLocation,
   onToggleRoute,
   onShareNoteChange,
+  onUpdateAttendeeStatus,
+  attendeeStatusUpdatingId,
+  attendeeStatusError,
 }) {
   if (!selected) return null;
   const [showShared, setShowShared] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState(null);
+  const statusOptions = useMemo(
+    () => ["Confirmed", "On the way", "Running late", "Arrived", "Waiting"],
+    []
+  );
 
   return (
     <div className="card hangouts-detail-card shadow-sm">
       <div className="hangouts-detail-header">
         <div>
-          <div className="fw-bold">{selected.title}</div>
+          <div className="hangouts-detail-title">{selected.title}</div>
           <div className="text-muted small">
             Hosted by {selected.creator?.username || "Unknown"}
           </div>
@@ -56,80 +65,161 @@ export default function HangoutDetailCard({
       </div>
 
       <div className="hangouts-detail-body">
-        <div className="small">
-          <div className="text-muted">Starts</div>
-          <div>{formatDateTime(selected.startsAt)}</div>
-          <div className="text-muted mt-2">Ends</div>
-          <div>{formatDateTime(selected.endsAt)}</div>
-          <div className="text-muted mt-2">Visibility</div>
-          <div>{selected.visibility || "friends"}</div>
-          {selected?.location?.coordinates?.length === 2 && userLocation && (
-            <>
-              <div className="text-muted mt-2">Distance</div>
-              <div>
-                {driveDistanceLoading
-                  ? "Calculating..."
-                  : driveDistanceKm !== null
-                    ? `${driveDistanceKm.toFixed(2)} km (driving)`
-                    : `${distanceKm(userLocation, {
-                        lng: selected.location.coordinates[0],
-                        lat: selected.location.coordinates[1],
-                      })?.toFixed(2)} km (straight-line)`}
+        <div className="hangouts-detail-meta">
+          <div className="hangouts-detail-meta-row">
+            <div className="hangouts-detail-meta-block">
+              <div className="hangouts-detail-label">Starts</div>
+              <div>{formatDateTime(selected.startsAt)?.split(",")[0]}</div>
+              <div className="text-muted small">
+                {formatDateTime(selected.startsAt)?.split(",")[1]?.trim() || ""}
               </div>
-              {driveDistanceError && (
-                <div className="text-muted small">{driveDistanceError}</div>
-              )}
-            </>
-          )}
+            </div>
+            <div className="hangouts-detail-meta-block">
+              <div className="hangouts-detail-label">Ends</div>
+              <div>{formatDateTime(selected.endsAt)?.split(",")[0]}</div>
+              <div className="text-muted small">
+                {formatDateTime(selected.endsAt)?.split(",")[1]?.trim() || ""}
+              </div>
+            </div>
+          </div>
+          <div className="hangouts-detail-meta-row">
+            <div className="hangouts-detail-meta-block">
+              <div className="hangouts-detail-label">Visibility</div>
+              <div>{selected.visibility || "friends"}</div>
+            </div>
+            {selected?.location?.coordinates?.length === 2 && userLocation && (
+              <div className="hangouts-detail-meta-block">
+                <div className="hangouts-detail-label">Distance</div>
+                <div>
+                  {driveDistanceLoading
+                    ? "Calculating..."
+                    : driveDistanceKm !== null
+                      ? `${driveDistanceKm.toFixed(2)} km (driving)`
+                      : `${distanceKm(userLocation, {
+                          lng: selected.location.coordinates[0],
+                          lat: selected.location.coordinates[1],
+                        })?.toFixed(2)} km (straight-line)`}
+                </div>
+                {driveDistanceError && (
+                  <div className="text-muted small">{driveDistanceError}</div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {selected.description && (
-          <div className="small mt-3">{selected.description}</div>
+          <div className="small mt-3">
+            <div className="hangouts-detail-label">Description</div>
+            <div>{selected.description}</div>
+          </div>
         )}
 
         <div className="mt-3">
-          <div className="text-muted small">Attendees ({selected.attendeeCount})</div>
+          <div className="hangouts-detail-label small">Attendees ({selected.attendeeCount})</div>
           {selected.maxAttendees && (
             <div className="text-muted small">Max attendees: {selected.maxAttendees}</div>
           )}
-          <div className="d-flex flex-wrap gap-2 mt-2">
+          <div className="attendees-list mt-2">
             {(selected.attendees || []).map((a) => {
               const src = resolveAvatar(a.avatarUrl);
               const isSelf = String(a.id || "") === String(currentUserId || "");
-              const canRemove = isCreator && !isSelf;
+              const name = a.displayName || a.username || "Unknown";
+              const currentStatus = a.status || a.attendanceStatus || "Confirmed";
+              const canOpenProfile = !!(a.username || a.displayName);
               return (
-                <div key={a.id} className={`attendee-tile ${canRemove ? "is-removable" : ""}`}>
-                  {src ? (
-                    <img src={src} alt={a.username} className="attendee-avatar" />
-                  ) : (
-                    <div className="attendee-fallback">
-                      {(a.username || "?").slice(0, 1).toUpperCase()}
+                <div
+                  key={a.id}
+                  className="attendee-row"
+                  onMouseLeave={() => setOpenMenuId((prev) => (prev === a.id ? null : prev))}
+                  onClick={() => {
+                    if (!canOpenProfile) return;
+                    const handle = a.username || a.displayName;
+                    onOpenProfile?.(handle, { newTab: true });
+                  }}
+                  role={canOpenProfile ? "button" : undefined}
+                  tabIndex={canOpenProfile ? 0 : -1}
+                  onKeyDown={(e) => {
+                    if (!canOpenProfile) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      const handle = a.username || a.displayName;
+                      onOpenProfile?.(handle, { newTab: true });
+                    }
+                  }}
+                >
+                  <div className="attendee-left">
+                    {src ? (
+                      <img src={src} alt={name} className="attendee-avatar" />
+                    ) : (
+                      <div className="attendee-fallback">
+                        {(name || "?").slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="attendee-main">
+                    <div className="attendee-name">{name}</div>
+                    {isSelf ? (
+                      <select
+                        className="attendee-status-select"
+                        value={currentStatus}
+                        onChange={(e) => onUpdateAttendeeStatus?.(a.id, e.target.value)}
+                        disabled={String(attendeeStatusUpdatingId || "") === String(a.id || "")}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {statusOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="attendee-status-text">{currentStatus}</div>
+                    )}
+                  </div>
+                  {isCreator && !isSelf && (
+                    <div className="attendee-more-wrap">
+                      <button
+                        type="button"
+                        className="attendee-more"
+                        aria-label="More actions"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId((prev) => (prev === a.id ? null : a.id));
+                        }}
+                      >
+                        <img src={moreIcon} alt="" aria-hidden="true" />
+                      </button>
+                      {openMenuId === a.id && (
+                        <div className="attendee-more-menu">
+                          <button
+                            type="button"
+                            className="attendee-more-item"
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              onRequestRemoveAttendee?.(a);
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
-                  {canRemove ? (
-                    <button
-                      type="button"
-                      className="attendee-remove-btn"
-                      aria-label={`Remove ${a.displayName || a.username || "attendee"}`}
-                      onClick={() => onRequestRemoveAttendee?.(a)}
-                    >
-                      {removeAttendeeIcon ? (
-                        <img src={removeAttendeeIcon} alt="" aria-hidden="true" />
-                      ) : (
-                        "x"
-                      )}
-                    </button>
-                  ) : null}
                 </div>
               );
             })}
           </div>
+          {attendeeStatusError && (
+            <div className="hangouts-detail-inline-error small mt-2">{attendeeStatusError}</div>
+          )}
         </div>
 
         {isCreator && Array.isArray(pendingJoinRequests) && (
           <div className="mt-3">
             <div className="d-flex justify-content-between align-items-center">
-              <div className="text-muted small">Join requests ({pendingJoinRequests.length})</div>
+              <div className="hangouts-detail-label small">Join requests ({pendingJoinRequests.length})</div>
             </div>
             {pendingJoinRequests.length === 0 ? (
               <div className="text-muted small mt-1">No pending requests.</div>
@@ -153,7 +243,7 @@ export default function HangoutDetailCard({
                       className={`hangout-request-row ${canOpenProfile ? "" : "is-disabled-link"}`}
                       onClick={() => {
                         if (!canOpenProfile) return;
-                        onOpenProfile?.(reqUsername);
+                        onOpenProfile?.(reqUsername, { newTab: true });
                       }}
                       role={canOpenProfile ? "button" : undefined}
                       tabIndex={canOpenProfile ? 0 : -1}
@@ -161,7 +251,7 @@ export default function HangoutDetailCard({
                         if (!canOpenProfile) return;
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          onOpenProfile?.(reqUsername);
+                          onOpenProfile?.(reqUsername, { newTab: true });
                         }
                       }}
                     >
@@ -282,7 +372,7 @@ export default function HangoutDetailCard({
           </div>
         )}
 
-        {selected.sharedLocations?.length > 0 && (
+        {isJoined && selected.sharedLocations?.length > 0 && (
           <div className="mt-3">
             <div className="d-flex justify-content-between align-items-center mb-1">
               <div className="text-muted small">Shared locations</div>
@@ -304,11 +394,16 @@ export default function HangoutDetailCard({
                       coords && coords.length === 2
                         ? { lng: coords[0], lat: coords[1] }
                         : null;
-                    const km = distanceKm(userLocation, loc);
+                    const hangoutCoords = selected.location?.coordinates;
+                    const hangoutLoc =
+                      hangoutCoords && hangoutCoords.length === 2
+                        ? { lng: hangoutCoords[0], lat: hangoutCoords[1] }
+                        : null;
+                    const km = distanceKm(hangoutLoc, loc);
                     return (
                       <div key={entry.user?.id || idx} className="small">
                         {entry.user?.username || "Someone"}
-                        {km !== null ? ` - ${km.toFixed(2)} km away` : ""}
+                        {km !== null ? ` - ${km.toFixed(2)} km from hangout` : ""}
                       </div>
                     );
                   })}

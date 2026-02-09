@@ -10,6 +10,13 @@ const { authRequired } = require("../middleware/authRequired");
 const { getIO, onlineUsers } = require("../realtime");
 
 const router = express.Router();
+const ATTENDEE_STATUS_OPTIONS = new Set([
+  "Confirmed",
+  "On the way",
+  "Running late",
+  "Arrived",
+  "Waiting",
+]);
 
 function asNumber(value) {
   const n = Number(value);
@@ -89,6 +96,11 @@ async function emitSystemMessage(chatId, senderId, text) {
 
 function toHangoutSummary(doc, opts = {}) {
   const { includeSharedLocations = false, viewerId = null } = opts;
+  const statusById = new Map();
+  for (const entry of doc.attendeeStatuses || []) {
+    if (!entry?.userId) continue;
+    statusById.set(String(entry.userId), entry);
+  }
   let sharedLocations = [];
   if (includeSharedLocations) {
     const attendeeById = new Map();
@@ -130,7 +142,15 @@ function toHangoutSummary(doc, opts = {}) {
     joinPolicy: doc.joinPolicy || "open",
     avatarUrl: doc.avatarUrl || null,
     creator: toUserSummary(doc.creatorId),
-    attendees: (doc.attendeeIds || []).map(toUserSummary),
+    attendees: (doc.attendeeIds || []).map((user) => {
+      const summary = toUserSummary(user);
+      const entry = statusById.get(String(summary?.id || ""));
+      return {
+        ...summary,
+        status: entry?.status || "Confirmed",
+        statusUpdatedAt: entry?.updatedAt || null,
+      };
+    }),
     attendeeCount: (doc.attendeeIds || []).length,
     joinRequestStatus: viewerPendingRequest ? "pending" : "none",
     pendingJoinRequests:
@@ -225,6 +245,7 @@ router.post("/", authRequired, async (req, res) => {
     ),
     maxAttendees,
     attendeeIds: [me],
+    attendeeStatuses: [{ userId: me, status: "Confirmed", updatedAt: new Date() }],
   });
 
   if (createGroupChat !== false) {
@@ -376,6 +397,18 @@ router.post("/:id/join", authRequired, async (req, res) => {
       }),
     });
   }
+  if (alreadyJoined) {
+    const refreshed = await Hangout.findById(id)
+      .populate("creatorId", "username displayName avatarUrl")
+      .populate("attendeeIds", "username displayName avatarUrl")
+      .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
+    return res.json({
+      hangout: toHangoutSummary(refreshed || doc, {
+        includeSharedLocations: true,
+        viewerId: me,
+      }),
+    });
+  }
   if (!alreadyJoined && doc.maxAttendees && doc.attendeeIds.length >= doc.maxAttendees) {
     return res.status(409).json({ message: "Hangout is full" });
   }
@@ -405,7 +438,8 @@ router.post("/:id/join", authRequired, async (req, res) => {
     id,
     {
       $addToSet: { attendeeIds: me },
-      $pull: { pendingJoinRequests: { userId: me } },
+      $pull: { pendingJoinRequests: { userId: me }, attendeeStatuses: { userId: me } },
+      $push: { attendeeStatuses: { userId: me, status: "Confirmed", updatedAt: new Date() } },
     },
     { new: true }
   )
@@ -450,7 +484,8 @@ router.post("/:id/join-requests/:userId/accept", authRequired, async (req, res) 
     id,
     {
       $addToSet: { attendeeIds: userId },
-      $pull: { pendingJoinRequests: { userId } },
+      $pull: { pendingJoinRequests: { userId }, attendeeStatuses: { userId } },
+      $push: { attendeeStatuses: { userId, status: "Confirmed", updatedAt: new Date() } },
       $push: {
         approvedJoinEvents: {
           userId,
@@ -537,7 +572,13 @@ router.post("/:id/leave", authRequired, async (req, res) => {
 
   const updated = await Hangout.findByIdAndUpdate(
     id,
-    { $pull: { attendeeIds: me, sharedLocations: { userId: me } } },
+    {
+      $pull: {
+        attendeeIds: me,
+        attendeeStatuses: { userId: me },
+        sharedLocations: { userId: me },
+      },
+    },
     { new: true }
   )
     .populate("creatorId", "username displayName avatarUrl")
@@ -591,6 +632,7 @@ router.post("/:id/remove-attendee", authRequired, async (req, res) => {
     {
       $pull: {
         attendeeIds: userId,
+        attendeeStatuses: { userId },
         sharedLocations: { userId },
         pendingJoinRequests: { userId },
       },
@@ -628,6 +670,55 @@ router.post("/:id/remove-attendee", authRequired, async (req, res) => {
   if (io) io.emit("hangout:update", { hangoutId: id, attendeeRemovedUserId: String(userId) });
 
   res.json({ ok: true, hangout: toHangoutSummary(updated, { includeSharedLocations: true, viewerId: me }) });
+});
+
+// PATCH /hangouts/:id/attendees/me/status
+router.patch("/:id/attendees/me/status", authRequired, async (req, res) => {
+  const me = req.user.userId;
+  const { id } = req.params;
+  const cleanStatus = String(req.body?.status || "").trim();
+
+  if (!mongoose.isValidObjectId(id)) {
+    return res.status(400).json({ message: "Invalid hangout id" });
+  }
+  if (!ATTENDEE_STATUS_OPTIONS.has(cleanStatus)) {
+    return res.status(400).json({ message: "Invalid status" });
+  }
+
+  const doc = await Hangout.findById(id);
+  if (!doc) return res.status(404).json({ message: "Hangout not found" });
+
+  const isAttendee = (doc.attendeeIds || []).some((uid) => String(uid) === String(me));
+  if (!isAttendee) {
+    return res.status(403).json({ message: "Only attendees can update status" });
+  }
+
+  const updatedAt = new Date();
+  const filtered = (doc.attendeeStatuses || []).filter(
+    (entry) => String(entry?.userId || "") !== String(me)
+  );
+  filtered.push({ userId: me, status: cleanStatus, updatedAt });
+  doc.attendeeStatuses = filtered;
+  await doc.save();
+  await doc.populate("creatorId", "username displayName avatarUrl");
+  await doc.populate("attendeeIds", "username displayName avatarUrl");
+  await doc.populate("pendingJoinRequests.userId", "username displayName avatarUrl");
+
+  const io = getIO();
+  if (io) {
+    io.to(`hangout:${String(id)}`).emit("hangout:attendeeStatusUpdated", {
+      hangoutId: String(id),
+      userId: String(me),
+      status: cleanStatus,
+      updatedAt,
+    });
+  }
+
+  return res.json({
+    ok: true,
+    attendee: { userId: String(me), status: cleanStatus, updatedAt },
+    hangout: toHangoutSummary(doc, { includeSharedLocations: true, viewerId: me }),
+  });
 });
 
 // DELETE /hangouts/:id

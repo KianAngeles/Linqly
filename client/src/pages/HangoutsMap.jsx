@@ -162,7 +162,7 @@ function sortSearchResults(features = []) {
 
 export default function HangoutsMap() {
   const nav = useNavigate();
-  const { user, accessToken, logout } = useAuth();
+  const { user, accessToken } = useAuth();
   const mapRef = useRef(null);
   const mapContainerRef = useRef(null);
   const markersRef = useRef([]);
@@ -202,17 +202,19 @@ export default function HangoutsMap() {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState("");
   const [routeVisible, setRouteVisible] = useState(false);
-  const [detailPlacement, setDetailPlacement] = useState(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [showWithinList, setShowWithinList] = useState(true);
   const [showJoinedList, setShowJoinedList] = useState(true);
   const [showMyHangouts, setShowMyHangouts] = useState(false);
   const [shareNote, setShareNote] = useState("");
   const [shareNoteError, setShareNoteError] = useState("");
   const [joinActionError, setJoinActionError] = useState("");
+  const [attendeeStatusUpdatingId, setAttendeeStatusUpdatingId] = useState("");
+  const [attendeeStatusError, setAttendeeStatusError] = useState("");
   const [joinRequestActionKey, setJoinRequestActionKey] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [searchCountry, setSearchCountry] = useState("ph");
   const searchRef = useRef(null);
@@ -237,6 +239,7 @@ export default function HangoutsMap() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [removeAttendeeTarget, setRemoveAttendeeTarget] = useState(null);
   const [showHangoutClosedModal, setShowHangoutClosedModal] = useState(false);
+  const joinedHangoutRoomRef = useRef(null);
 
   const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN || "", []);
 
@@ -588,15 +591,11 @@ export default function HangoutsMap() {
       .addTo(mapRef.current);
     marker.getElement().addEventListener("click", (e) => {
       e.stopPropagation();
-      if (selectedId === h._id) {
-        setSelectedId(null);
-        setSelected(null);
-        setDetailPlacement(null);
+      if (selectedId === h._id && isDetailOpen) {
+        closeHangoutDetails();
         return;
       }
-      setSelectedId(h._id);
-      setSelected(h);
-      setDetailPlacement("joined");
+      openHangoutDetails(h);
     });
     markersRef.current.push(marker);
     }
@@ -781,6 +780,8 @@ export default function HangoutsMap() {
   useEffect(() => {
     setJoinActionError("");
     setJoinRequestActionKey("");
+    setAttendeeStatusError("");
+    setAttendeeStatusUpdatingId("");
   }, [selected?._id]);
 
   useEffect(() => {
@@ -790,15 +791,11 @@ export default function HangoutsMap() {
     const found = feed.find((h) => h._id === hangoutIdParam);
     if (found) {
       if (isHangoutClosed(found)) {
-        setSelectedId(null);
-        setSelected(null);
-        setDetailPlacement(null);
+        closeHangoutDetails();
         setShowHangoutClosedModal(true);
         return;
       }
-      setSelectedId(found._id);
-      setSelected(found);
-      setDetailPlacement("joined");
+      openHangoutDetails(found);
       const coords = found.location?.coordinates;
       if (mapRef.current && mapLoaded && coords?.length === 2) {
         mapRef.current.flyTo({
@@ -810,9 +807,7 @@ export default function HangoutsMap() {
       return;
     }
     if (accessToken) {
-      setSelectedId(hangoutIdParam);
-      setDetailPlacement("joined");
-      loadDetails(hangoutIdParam);
+      openHangoutDetails(hangoutIdParam);
     }
   }, [hangoutIdParam, feed, mapLoaded, accessToken]);
 
@@ -860,10 +855,6 @@ export default function HangoutsMap() {
   const myHangouts = useMemo(
     () => feed.filter((h) => String(h.creator?.id) === String(user?.id)),
     [feed, user?.id]
-  );
-  const joinedHangoutIds = useMemo(
-    () => joinedHangouts.map((h) => h._id).filter(Boolean),
-    [joinedHangouts]
   );
   const shareTargets = useMemo(() => {
     const ids = new Set();
@@ -917,6 +908,91 @@ export default function HangoutsMap() {
   useEffect(() => {
     selectedIdRef.current = selected?._id || null;
   }, [selected?._id]);
+
+  useEffect(() => {
+    const hangoutId = isDetailOpen ? selected?._id : null;
+    const prev = joinedHangoutRoomRef.current;
+    if (prev && prev !== hangoutId) {
+      socket.emit("hangout:leave", { hangoutId: prev });
+      joinedHangoutRoomRef.current = null;
+    }
+    if (hangoutId && prev !== hangoutId) {
+      socket.emit("hangout:join", { hangoutId });
+      joinedHangoutRoomRef.current = hangoutId;
+    }
+    if (!hangoutId && prev) {
+      socket.emit("hangout:leave", { hangoutId: prev });
+      joinedHangoutRoomRef.current = null;
+    }
+  }, [isDetailOpen, selected?._id]);
+
+  useEffect(() => {
+    return () => {
+      const prev = joinedHangoutRoomRef.current;
+      if (prev) {
+        socket.emit("hangout:leave", { hangoutId: prev });
+        joinedHangoutRoomRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleStatusUpdate(payload) {
+      if (!payload?.hangoutId || !payload?.userId) return;
+      if (String(payload.hangoutId) !== String(selectedIdRef.current || "")) return;
+      setSelected((prev) => {
+        if (!prev) return prev;
+        const attendees = (prev.attendees || []).map((a) => {
+          if (String(a.id) !== String(payload.userId)) return a;
+          return { ...a, status: payload.status, attendanceStatus: payload.status };
+        });
+        return { ...prev, attendees };
+      });
+    }
+    socket.on("hangout:attendeeStatusUpdated", handleStatusUpdate);
+    return () => {
+      socket.off("hangout:attendeeStatusUpdated", handleStatusUpdate);
+    };
+  }, []);
+
+  function updateSelectedAttendeeStatus(userId, status) {
+    setSelected((prev) => {
+      if (!prev) return prev;
+      const attendees = (prev.attendees || []).map((a) => {
+        if (String(a.id) !== String(userId)) return a;
+        return { ...a, status, attendanceStatus: status };
+      });
+      return { ...prev, attendees };
+    });
+  }
+
+  async function handleUpdateAttendeeStatus(userId, nextStatus) {
+    if (!selected?._id || !accessToken || !userId) return;
+    const current = (selected.attendees || []).find(
+      (a) => String(a.id) === String(userId)
+    );
+    const prevStatus = current?.status || current?.attendanceStatus || "Confirmed";
+    updateSelectedAttendeeStatus(userId, nextStatus);
+    setAttendeeStatusUpdatingId(String(userId));
+    setAttendeeStatusError("");
+    try {
+      const data = await hangoutsApi.updateAttendeeStatus(
+        accessToken,
+        selected._id,
+        nextStatus
+      );
+      if (data?.hangout && String(data.hangout._id) === String(selected._id)) {
+        setSelected(data.hangout);
+      } else if (data?.attendee?.status) {
+        updateSelectedAttendeeStatus(userId, data.attendee.status);
+      }
+    } catch (err) {
+      updateSelectedAttendeeStatus(userId, prevStatus);
+      setAttendeeStatusError(err.message || "Failed to update status");
+    } finally {
+      setAttendeeStatusUpdatingId("");
+    }
+  }
 
   useEffect(() => {
     if (!mapboxToken || !userLocation || !selected?.location?.coordinates) {
@@ -1263,11 +1339,6 @@ export default function HangoutsMap() {
     }
   }
 
-  async function handleLogout() {
-    await logout();
-    nav("/", { replace: true });
-  }
-
   function handleShowMap() {
     setMapReady(true);
   }
@@ -1531,11 +1602,44 @@ export default function HangoutsMap() {
     }
   }
 
-  function handleCloseDetail() {
+  function closeHangoutDetails() {
+    setIsDetailOpen(false);
     setSelectedId(null);
     setSelected(null);
-    setDetailPlacement(null);
   }
+
+  function openHangoutDetails(hangoutOrId) {
+    const hangoutId =
+      typeof hangoutOrId === "string" ? hangoutOrId : hangoutOrId?._id;
+    if (!hangoutId) return;
+    setSelectedId(hangoutId);
+    if (hangoutOrId && typeof hangoutOrId === "object") {
+      setSelected(hangoutOrId);
+    }
+    setIsDetailOpen(true);
+  }
+
+  function handleCloseDetail() {
+    closeHangoutDetails();
+  }
+
+  useEffect(() => {
+    if (!isDetailOpen) return;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        closeHangoutDetails();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isDetailOpen]);
+
+  useEffect(() => {
+    document.body.style.overflow = isDetailOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isDetailOpen]);
 
   function closeHangoutClosedModal() {
     setShowHangoutClosedModal(false);
@@ -1547,7 +1651,8 @@ export default function HangoutsMap() {
     nav(query ? `/app/map?${query}` : "/app/map", { replace: true });
   }
 
-  function renderHangoutList(items, emptyCopy, placement) {
+  function renderHangoutList(items, emptyCopy, options = {}) {
+    const { splitTimeRow = false } = options;
     if (isLoading) {
       return <div className="hangouts-panel-muted">Loading hangouts...</div>;
     }
@@ -1562,9 +1667,7 @@ export default function HangoutsMap() {
             type="button"
             className={`hangout-list-item${selectedId === h._id ? " is-active" : ""}`}
             onClick={() => {
-              setSelectedId(h._id);
-              setSelected(h);
-              if (placement) setDetailPlacement(placement);
+              openHangoutDetails(h);
               const coords = h.location?.coordinates;
               if (
                 mapRef.current &&
@@ -1580,6 +1683,18 @@ export default function HangoutsMap() {
               }
             }}
           >
+            {(() => {
+              const coords = h.location?.coordinates;
+              const km =
+                userLocation && coords && coords.length === 2
+                  ? distanceKm(userLocation, { lng: coords[0], lat: coords[1] })
+                  : null;
+              const distanceText =
+                typeof km === "number"
+                  ? `${km.toFixed(2)} km`
+                  : formatDistance(h.distanceMeters) || "Nearby";
+              return (
+                <>
             {resolveAvatar(h.creator?.avatarUrl) ? (
               <img
                 src={resolveAvatar(h.creator?.avatarUrl)}
@@ -1596,14 +1711,28 @@ export default function HangoutsMap() {
               <div className="hangout-list-subtitle">
                 {h.creator?.username || "Unknown"}
               </div>
-              <div className="hangout-list-meta">
-                <span>{formatDistance(h.distanceMeters) || "Nearby"}</span>
-                <span>{h.timeLabel || formatDateTime(h.startsAt) || "Time TBD"}</span>
-              </div>
+              {splitTimeRow ? (
+                <>
+                  <div className="hangout-list-meta">
+                    <span>{distanceText}</span>
+                  </div>
+                  <div className="hangout-list-meta">
+                    <span>{h.timeLabel || formatDateTime(h.startsAt) || "Time TBD"}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="hangout-list-meta">
+                  <span>{distanceText}</span>
+                  <span>{h.timeLabel || formatDateTime(h.startsAt) || "Time TBD"}</span>
+                </div>
+              )}
               <div className="hangout-list-meta">
                 <span>{h.attendeeCount || h.attendees?.length || 0} attending</span>
               </div>
             </div>
+                </>
+              );
+            })()}
           </button>
         ))}
       </div>
@@ -1732,72 +1861,15 @@ export default function HangoutsMap() {
                       </button>
                     </div>
                   </div>
-                  {detailPlacement === "joined" && selected ? (
-                    <div className="map-joined-detail">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={handleCloseDetail}
-                      >
-                        Back
-                      </button>
-                      <HangoutDetailCard
-                        selected={selected}
-                        currentUserId={user?.id}
-                        userLocation={userLocation}
-                        isCreator={isCreator}
-                        isJoined={isJoined}
-                        isFull={isFull}
-                        isDetailLoading={isDetailLoading}
-                        shareEnabled={shareEnabled}
-                        shareError={shareError}
-                        shareLoading={shareLoading}
-                        shareNote={shareNote}
-                        shareNoteError={shareNoteError}
-                        driveDistanceLoading={driveDistanceLoading}
-                        driveDistanceKm={driveDistanceKm}
-                        driveDistanceError={driveDistanceError}
-                        routeLoading={routeLoading}
-                        routeVisible={routeVisible}
-                        routeError={routeError}
-                        formatDateTime={formatDateTime}
-                        resolveAvatar={resolveAvatar}
-                        distanceKm={distanceKm}
-                        onClose={handleCloseDetail}
-                        onJoinLeave={handleJoinLeave}
-                        joinActionError={joinActionError}
-                        isJoinApprovalRequired={isJoinApprovalRequired}
-                        isJoinRequestPending={isJoinRequestPending}
-                        pendingJoinRequests={selected?.pendingJoinRequests || []}
-                        joinRequestActionKey={joinRequestActionKey}
-                        onApproveJoinRequest={handleApproveJoinRequest}
-                        onDeclineJoinRequest={handleDeclineJoinRequest}
-                        onOpenProfile={(username) => {
-                          const clean = String(username || "").replace(/^@+/, "").trim();
-                          if (!clean) return;
-                          nav(`/app/profile/${encodeURIComponent(clean)}`);
-                        }}
-                        removeAttendeeIcon={removeAttendeeIcon}
-                        onRequestRemoveAttendee={openRemoveAttendeeConfirm}
-                        onDelete={openDeleteConfirm}
-                        onEdit={openEdit}
-                        onToggleShareLocation={handleToggleShareLocation}
-                        onToggleRoute={handleToggleRoute}
-                        onShareNoteChange={(e) => setShareNote(e.target.value)}
-                      />
+                  {showJoinedList && (
+                    <div className="map-joined-body">
+                      {renderHangoutList(
+                        showMyHangouts ? myHangouts : joinedHangouts,
+                        showMyHangouts
+                          ? "You have not created any hangouts yet."
+                          : "You have not joined any hangouts yet."
+                      )}
                     </div>
-                  ) : (
-                    showJoinedList && (
-                      <div className="map-joined-body">
-                        {renderHangoutList(
-                          showMyHangouts ? myHangouts : joinedHangouts,
-                          showMyHangouts
-                            ? "You have not created any hangouts yet."
-                            : "You have not joined any hangouts yet.",
-                          "joined"
-                        )}
-                      </div>
-                    )
                   )}
                 </div>
                 <div className="map-actions-right">
@@ -1842,7 +1914,7 @@ export default function HangoutsMap() {
                         {renderHangoutList(
                           feed,
                           "No hangouts within this radius yet.",
-                          "joined"
+                          { splitTimeRow: true }
                         )}
                       </div>
                     )}
@@ -1856,6 +1928,72 @@ export default function HangoutsMap() {
               mapReady={mapReady}
               feedLength={feed.length}
             />
+
+            <aside
+              className={`hangouts-detail-panel ${isDetailOpen ? "is-open" : ""}`}
+              role="dialog"
+              aria-modal="true"
+              aria-hidden={!isDetailOpen}
+            >
+              {selected ? (
+                <HangoutDetailCard
+                  selected={selected}
+                  currentUserId={user?.id}
+                  userLocation={userLocation}
+                  isCreator={isCreator}
+                  isJoined={isJoined}
+                  isFull={isFull}
+                  isDetailLoading={isDetailLoading}
+                  shareEnabled={shareEnabled}
+                  shareError={shareError}
+                  shareLoading={shareLoading}
+                  shareNote={shareNote}
+                  shareNoteError={shareNoteError}
+                  driveDistanceLoading={driveDistanceLoading}
+                  driveDistanceKm={driveDistanceKm}
+                  driveDistanceError={driveDistanceError}
+                  routeLoading={routeLoading}
+                  routeVisible={routeVisible}
+                  routeError={routeError}
+                  formatDateTime={formatDateTime}
+                  resolveAvatar={resolveAvatar}
+                  distanceKm={distanceKm}
+                  onClose={handleCloseDetail}
+                  onJoinLeave={handleJoinLeave}
+                  joinActionError={joinActionError}
+                  isJoinApprovalRequired={isJoinApprovalRequired}
+                  isJoinRequestPending={isJoinRequestPending}
+                  pendingJoinRequests={selected?.pendingJoinRequests || []}
+                  joinRequestActionKey={joinRequestActionKey}
+                  onApproveJoinRequest={handleApproveJoinRequest}
+                  onDeclineJoinRequest={handleDeclineJoinRequest}
+                  onOpenProfile={(username, opts = {}) => {
+                    const clean = String(username || "").replace(/^@+/, "").trim();
+                    if (!clean) return;
+                    const url = `/app/profile/${encodeURIComponent(clean)}`;
+                    if (opts?.newTab) {
+                      window.open(url, "_blank", "noopener,noreferrer");
+                    } else {
+                      nav(url);
+                    }
+                  }}
+                  removeAttendeeIcon={removeAttendeeIcon}
+                  onRequestRemoveAttendee={openRemoveAttendeeConfirm}
+                  onDelete={openDeleteConfirm}
+                  onEdit={openEdit}
+                  onToggleShareLocation={handleToggleShareLocation}
+                  onToggleRoute={handleToggleRoute}
+                  onShareNoteChange={(e) => setShareNote(e.target.value)}
+                  onUpdateAttendeeStatus={handleUpdateAttendeeStatus}
+                  attendeeStatusUpdatingId={attendeeStatusUpdatingId}
+                  attendeeStatusError={attendeeStatusError}
+                />
+              ) : (
+                <div className="hangouts-detail-empty">
+                  {isDetailLoading ? "Loading details..." : "Select a hangout"}
+                </div>
+              )}
+            </aside>
 
           </div>
         </div>

@@ -1,17 +1,22 @@
-﻿import { Link, Navigate } from "react-router-dom";
+﻿import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../store/AuthContext";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import landingPinIcon from "../assets/icons/landing-icons/landing-pin-icon.png";
 import landingMessageIcon from "../assets/icons/landing-icons/landing-message-icon.png";
 import realtimeIcon from "../assets/icons/landing-icons/realtime-icon.png";
 import mapIcon from "../assets/icons/landing-icons/map-icon.png";
 import messageIcon from "../assets/icons/landing-icons/message-icon.png";
 import meetupIcon from "../assets/icons/landing-icons/meetup-icon.png";
+import rightArrowIcon from "../assets/icons/landing-icons/right-arrow.png";
+import whiteDropdownIcon from "../assets/icons/landing-icons/white-dropdown.png";
 import "./Landing.css";
 export default function Landing() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const transitionRef = useRef(0);
 
   useEffect(() => {
     let frame = 0;
@@ -54,7 +59,7 @@ export default function Landing() {
           observer.unobserve(entry.target);
         });
       },
-      { threshold: 0.22, rootMargin: "0px 0px -10% 0px" }
+      { threshold: 0.12, rootMargin: "0px 0px -6% 0px" }
     );
 
     elements.forEach((el) => observer.observe(el));
@@ -62,7 +67,28 @@ export default function Landing() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (transitionRef.current) {
+        window.clearTimeout(transitionRef.current);
+      }
+    };
+  }, []);
+
   if (user) return <Navigate to="/app" replace />;
+
+  const handleRouteTransition = (path) => (event) => {
+    if (event) event.preventDefault();
+    if (isTransitioning) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      navigate(path);
+      return;
+    }
+    setIsTransitioning(true);
+    transitionRef.current = window.setTimeout(() => {
+      navigate(path);
+    }, 320);
+  };
 
   const bgShift = `translate3d(0, ${Math.round(scrollY * 0.1)}px, 0)`;
   const midShift = `translate3d(0, ${Math.round(scrollY * 0.2)}px, 0)`;
@@ -73,14 +99,18 @@ export default function Landing() {
  
   return (
     <div className="landing-page">
+      <div
+        className={`landing-route-transition ${isTransitioning ? "is-active" : ""}`}
+        aria-hidden="true"
+      />
       <header className={`landing-topbar ${loaded ? "isLoaded" : ""}`}>
         <div className="landing-topbar-pill">
           <Link to="/" className="landing-logo">
             <span className="landing-logo-text">Linqly</span>
           </Link>
           <div className="landing-topbar-actions">
-            <Link to="/login" className="landing-btn landing-btn-ghost">Login</Link>
-            <Link to="/register" className="landing-btn landing-btn-solid">Get started</Link>
+            <Link to="/login" className="landing-btn landing-btn-ghost" onClick={handleRouteTransition("/login")}>Login</Link>
+            <Link to="/register" className="landing-btn landing-btn-solid" onClick={handleRouteTransition("/register")}>Get started</Link>
           </div>
         </div>
       </header>
@@ -171,20 +201,24 @@ export default function Landing() {
           <p className="landing-hero-sub heroSubhead">
             <span className="heroSubheadParallax" style={{ transform: subheadShift }}>
               Linqly helps you discover people, plan hangouts on a map, and coordinate in real time
-              {" "}— all in one place.
+              {" "}all in one place.
             </span>
           </p>
           <div className="landing-hero-cta heroCtas">
             <div className="heroCtasParallax" style={{ transform: ctaShift }}>
-              <Link to="/register" className="landing-btn landing-btn-solid landing-hero-primary">
+              <Link to="/register" className="landing-btn landing-btn-solid landing-hero-primary" onClick={handleRouteTransition("/register")}>
                 Get started
-                <span aria-hidden="true" className="landing-hero-arrow">→</span>
+                <span aria-hidden="true" className="landing-hero-arrow">
+                  <img src={rightArrowIcon} alt="" aria-hidden="true" />
+                </span>
               </Link>
               <a href="#how-it-works" className="landing-btn landing-btn-outline">See how it works</a>
             </div>
           </div>
           <a href="#how-it-works" className="landing-scroll-indicator" aria-label="Scroll to next section">
-            <span aria-hidden="true">⌄</span>
+            <span aria-hidden="true">
+              <img src={whiteDropdownIcon} alt="" aria-hidden="true" />
+            </span>
           </a>
         </div>
       </section>
@@ -218,7 +252,7 @@ export default function Landing() {
                 <img src={meetupIcon} alt="" className="landing-value-icon" />
               </span>
               <h3>From idea to meetup</h3>
-              <p>Move from “we should hang out” to “see you there” quickly.</p>
+              <p>Move from we should hang out to see you there quickly.</p>
             </article>
           </div>
         </div>
@@ -239,8 +273,8 @@ export default function Landing() {
                   <h3>Connect with friends</h3>
                 </div>
                 <p>
-                  Build your network by adding friends, classmates, or community members. See who’s active and
-                  available in real time, so you always know who’s ready to hang out.
+                  Build your network by adding friends, classmates, or community members. See who's active and
+                  available in real time, so you always know who's ready to hang out.
                 </p>
                 <ul>
                   <li>Add friends via username, phone, or QR code</li>
@@ -292,7 +326,7 @@ export default function Landing() {
 
               <div className="landing-flow-mock landing-flow-mock-map reveal reveal-up reveal-blur" aria-hidden="true" style={{ "--d": "120ms" }}>
                 <div className="landing-flow-map-panel">
-                  <span className="landing-flow-map-pin" />
+                  <img src={mapIcon} alt="" className="landing-flow-map-pin" />
                   <div className="landing-flow-map-sheet">
                     <span className="landing-flow-sheet-title" />
                     <div className="landing-flow-sheet-lines">
@@ -372,15 +406,15 @@ export default function Landing() {
                   smoothly without endless back-and-forth.
                 </p>
                 <ul>
-                  <li>See who’s joining and when</li>
-                  <li>Reduce “Where are you?” messages</li>
+                  <li>See who's joining and when</li>
+                  <li>Reduce "Where are you?" messages</li>
                   <li>Turn conversations into real plans</li>
                 </ul>
               </div>
 
               <div className="landing-flow-mock landing-flow-mock-status reveal reveal-up reveal-blur" aria-hidden="true" style={{ "--d": "120ms" }}>
                 <div className="landing-flow-status-map">
-                  <span className="landing-flow-status-pin" />
+                  <img src={mapIcon} alt="" className="landing-flow-status-pin" />
                   <span className="landing-flow-status-route">
                     <span />
                   </span>
@@ -430,7 +464,12 @@ export default function Landing() {
           <div className="landing-highlight-visual" aria-hidden="true">
             <div className="landing-ui-card ui-map reveal reveal-up" style={{ "--d": "0ms" }}>
               <header>Map</header>
-              <div className="ui-placeholder">Live hangout pins</div>
+              <div className="ui-map-preview" aria-hidden="true">
+                <img src={mapIcon} alt="" className="ui-map-pin" />
+                <span className="ui-map-cta">
+                  <span />
+                </span>
+              </div>
             </div>
             <div className="landing-ui-card ui-chat reveal reveal-up" style={{ "--d": "120ms" }}>
               <header>Chat</header>
@@ -440,7 +479,7 @@ export default function Landing() {
             </div>
             <div className="landing-ui-card ui-hangout reveal reveal-up" style={{ "--d": "240ms" }}>
               <header>Hangout</header>
-              <p>Friday 7:30 PM • City Center</p>
+              <p>Friday 7:30 PM - City Center</p>
             </div>
           </div>
           <div className="landing-highlight-copy">
@@ -460,7 +499,7 @@ export default function Landing() {
           <div className="landing-usecase-grid">
             <article className="landing-usecase-card usecaseCard uc1 reveal reveal-up reveal-blur" style={{ "--d": "0ms" }}>
               <h3>Friends planning meetups</h3>
-              <p>Stop the endless “where should we go?” texts. Drop pins, vote, and coordinate in one place.</p>
+              <p>Stop the endless "where should we go?" texts. Drop pins, vote, and coordinate in one place.</p>
             </article>
             <article className="landing-usecase-card usecaseCard uc2 reveal reveal-up reveal-blur" style={{ "--d": "110ms" }}>
               <h3>Students coordinating hangouts</h3>
@@ -472,7 +511,7 @@ export default function Landing() {
             </article>
             <article className="landing-usecase-card usecaseCard uc4 reveal reveal-up reveal-blur" style={{ "--d": "330ms" }}>
               <h3>Anyone tired of messy group chats</h3>
-              <p>If you’ve ever lost track of plans in a 200-message thread, Linqly is for you.</p>
+              <p>If you've ever lost track of plans in a 200-message thread, Linqly is for you.</p>
             </article>
           </div>
         </div>
@@ -481,13 +520,13 @@ export default function Landing() {
       <section className="landing-final-cta" aria-labelledby="final-cta-heading">
         <div className="landing-shell">
           <h2 id="final-cta-heading" className="reveal reveal-up reveal-blur">Turn conversations into plans.</h2>
-          <Link to="/register" className="landing-btn landing-btn-solid reveal reveal-up" style={{ "--d": "120ms" }}>Join Linqly</Link>
+          <Link to="/register" className="landing-btn landing-btn-solid reveal reveal-up" style={{ "--d": "120ms" }} onClick={handleRouteTransition("/register")}>Join Linqly</Link>
         </div>
       </section>
 
       <footer className="landing-footer">
-        <div className="landing-shell landing-footer-inner reveal reveal-fade">
-          <span>Linqly © {new Date().getFullYear()}</span>
+        <div className="landing-shell landing-footer-inner reveal reveal-fade" style={{ "--d": "0ms" }}>
+          <span>Linqly - {new Date().getFullYear()}</span>
           <nav aria-label="Footer">
             <a href="#">Privacy</a>
             <a href="#">Terms</a>
@@ -498,3 +537,4 @@ export default function Landing() {
     </div>
   );
 }
+
