@@ -54,6 +54,7 @@ export default function HeaderBar() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [soundSilenceNotice, setSoundSilenceNotice] = useState("");
   const searchWrapRef = useRef(null);
   const notificationsWrapRef = useRef(null);
   const requestIdRef = useRef(0);
@@ -152,6 +153,30 @@ export default function HeaderBar() {
     }
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    let hideTimer = null;
+    const onSoundSilenced = (event) => {
+      const message =
+        event?.detail?.message ||
+        "Notifications silenced temporarily (too many messages).";
+      setSoundSilenceNotice(message);
+      if (hideTimer) {
+        window.clearTimeout(hideTimer);
+      }
+      hideTimer = window.setTimeout(() => {
+        setSoundSilenceNotice("");
+        hideTimer = null;
+      }, 3500);
+    };
+    window.addEventListener("message-sound:silenced", onSoundSilenced);
+    return () => {
+      window.removeEventListener("message-sound:silenced", onSoundSilenced);
+      if (hideTimer) {
+        window.clearTimeout(hideTimer);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -524,6 +549,11 @@ export default function HeaderBar() {
           </div>
         </div>
       )}
+      {soundSilenceNotice ? (
+        <div className="app-header-sound-banner" role="status" aria-live="polite">
+          {soundSilenceNotice}
+        </div>
+      ) : null}
     </header>
   );
 }

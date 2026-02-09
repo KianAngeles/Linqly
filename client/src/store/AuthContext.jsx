@@ -1,6 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { authApi } from "../api/auth.api";
 import { socket } from "../socket";
+import { isChatActive } from "./chatsStore";
+import {
+  NotificationSoundManager,
+  initMessageNotificationSound,
+} from "../utils/notificationSoundManager";
 
 const AuthContext = createContext(null);
 
@@ -9,7 +14,6 @@ export function AuthProvider({ children }) {
   const [accessToken, setAccessToken] = useState(null);
   const [ready, setReady] = useState(false);
   const [mutedChatIds, setMutedChatIds] = useState(new Set());
-  const audioUnlockedRef = useRef(false);
   const joinedChatIdsRef = useRef(new Set());
 
   async function refreshChatSettings(tokenOverride) {
@@ -77,33 +81,9 @@ export function AuthProvider({ children }) {
     socket.emit("auth:online", user.id);
   }, [user]);
 
-  const notifyAudio = useMemo(() => {
-    const a = new Audio("/sounds/notify.mp3");
-    a.volume = 0.5;
-    return a;
-  }, []);
-
   useEffect(() => {
-    const unlockAudio = () => {
-      if (audioUnlockedRef.current) return;
-      audioUnlockedRef.current = true;
-      notifyAudio
-        .play()
-        .then(() => {
-          notifyAudio.pause();
-          notifyAudio.currentTime = 0;
-        })
-        .catch(() => {});
-    };
-
-    window.addEventListener("pointerdown", unlockAudio, { once: true });
-    window.addEventListener("keydown", unlockAudio, { once: true });
-
-    return () => {
-      window.removeEventListener("pointerdown", unlockAudio);
-      window.removeEventListener("keydown", unlockAudio);
-    };
-  }, [notifyAudio]);
+    initMessageNotificationSound();
+  }, []);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -119,14 +99,13 @@ export function AuthProvider({ children }) {
 
       // if chat is muted and not mentioned, do nothing
       if (!mentioned && mutedChatIds.has(String(msg.chatId))) return;
-
-      notifyAudio.currentTime = 0;
-      notifyAudio.play().catch(() => {});
+      if (isChatActive(msg.chatId)) return;
+      NotificationSoundManager.onIncomingMessage({ chatId: msg.chatId });
     };
 
     socket.on("message:new", onNew);
     return () => socket.off("message:new", onNew);
-  }, [user?.id, mutedChatIds, notifyAudio]);
+  }, [user?.id, mutedChatIds]);
 
   async function login(email, password) {
     const r = await authApi.login({ email, password });

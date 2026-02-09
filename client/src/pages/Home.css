@@ -322,63 +322,167 @@
 }
 
 
-.home-map-preview {
+.home-snapshot-chip {
+  background: #efefef;
+  color: #1f2937;
+}
+
+.home-map-snapshot {
   position: relative;
-  border-radius: 14px;
-  border: 1px solid #dbeafe;
-  background-color: #f0f7ff;
-  background-image: radial-gradient(
-      circle at 1px 1px,
-      rgba(37, 99, 235, 0.16) 1px,
-      transparent 0
-    ),
-    linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(255, 255, 255, 0.6));
-  background-size: 16px 16px, cover;
+  display: flex;
+  flex-direction: column;
   min-height: 460px;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   overflow: hidden;
+  cursor: pointer;
+  padding: 0;
 }
 
-.home-map-pin {
+.home-map-preview-mapbox {
+  position: relative;
+}
+
+.home-map-snapshot-legend {
   position: absolute;
-  width: 12px;
-  height: 12px;
+  top: 10px;
+  left: 10px;
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.1;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.home-map-snapshot-legend > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-map-legend-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.15);
+  background: #4b5563;
+  display: inline-block;
 }
 
-.home-map-pin-blue {
-  background: #2563eb;
-  top: 30%;
-  left: 38%;
+.home-map-legend-you {
+  background: #111827;
 }
 
-.home-map-pin-two {
-  top: 18%;
-  left: 64%;
+.home-map-legend-ring {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #4b5563;
+  display: inline-block;
 }
 
-.home-map-pin-green {
-  background: #34d399;
-  top: 52%;
-  left: 54%;
-  box-shadow: 0 0 0 6px rgba(52, 211, 153, 0.2);
-}
-
-.home-map-overlay {
+.home-map-canvas {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
-  background: #ffffff;
-  color: #2563eb;
-  font-weight: 600;
-  font-size: 0.75rem;
-  padding: 6px 12px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.home-map-canvas .mapboxgl-canvas {
+  filter: grayscale(1) contrast(0.95);
+}
+
+.home-map-user-marker {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #111827;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.home-map-hangout-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4b5563;
+  border: 1px solid #f9fafb;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+  position: relative;
+}
+
+.home-map-hangout-marker-ongoing::after,
+.home-map-hangout-marker-starting-soon::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
   border-radius: 999px;
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18);
+  border: 1.5px solid rgba(31, 41, 55, 0.45);
+}
+
+.home-map-hangout-marker-ongoing::after {
+  animation: homeRadarPulse 1.9s ease-out infinite;
+}
+
+.home-map-hangout-marker-starting-soon::after {
+  opacity: 0.9;
+}
+
+.home-map-snapshot-actions {
+  display: flex;
+  justify-content: flex-start;
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2;
+}
+
+.home-map-open-btn {
+  border: none;
+  border-radius: 10px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+
+.home-map-open-btn:hover,
+.home-map-open-btn:focus-visible {
+  background: #1f2937;
+}
+
+@keyframes homeRadarPulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.home-map-snapshot:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+}
+
+.home-map-overlay-message {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.82);
+  color: #374151;
+  font-size: 0.8rem;
+  z-index: 3;
+  text-align: center;
+  padding: 12px;
 }
 
 .home-map-footer {
-  margin-top: 10px;
+  margin-top: 8px;
   font-size: 0.78rem;
   color: #6b7280;
 }
@@ -413,8 +517,8 @@
   position: absolute;
   right: -1px;
   bottom: -1px;
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: #22c55e;
   border: 2px solid #ffffff;

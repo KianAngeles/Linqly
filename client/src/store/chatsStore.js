@@ -146,6 +146,10 @@ export function removeActiveChat(chatId) {
   chatsStore.removeActiveChat(chatId);
 }
 
+export function isChatActive(chatId) {
+  return chatsStore.isChatActive(chatId);
+}
+
 export function useChatsStore(userId) {
   const [chats, setChatsState] = useState(chatsStore.chats);
 
@@ -173,4 +177,3 @@ export function useChatsStore(userId) {
     unreadChatsCount,
   };
 }
-

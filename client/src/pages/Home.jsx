@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { useAuth } from "../store/AuthContext";
 import { chatsApi } from "../api/chats.api";
 import { hangoutsApi } from "../api/hangouts.api";
@@ -17,6 +19,11 @@ export default function Home() {
   const nav = useNavigate();
   const { user, accessToken } = useAuth();
   const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN || "", []);
+  const mapPreviewContainerRef = useRef(null);
+  const mapPreviewRef = useRef(null);
+  const mapPreviewMarkersRef = useRef([]);
+  const [mapPreviewLoaded, setMapPreviewLoaded] = useState(false);
   const [chats, setChats] = useState([]);
   const [chatError, setChatError] = useState("");
   const [hangouts, setHangouts] = useState([]);
@@ -244,6 +251,25 @@ export default function Home() {
     return objectIdToIsoTime(hangout?._id);
   };
 
+  const getSnapshotStatus = (hangout) => {
+    if (isHangoutOngoing(hangout)) return "ongoing";
+    const startsAtMs = hangout?.startsAt ? new Date(hangout.startsAt).getTime() : NaN;
+    if (!Number.isNaN(startsAtMs)) {
+      const delta = startsAtMs - Date.now();
+      if (delta > 0 && delta <= 60 * 60 * 1000) return "starting-soon";
+    }
+    return "idle";
+  };
+
+  const snapshotActiveCount = useMemo(() => {
+    const statuses = (hangouts || []).map(getSnapshotStatus);
+    const active = statuses.filter((status) => status === "ongoing" || status === "starting-soon")
+      .length;
+    return active > 0 ? active : statuses.length;
+  }, [hangouts]);
+
+  const openMapPage = () => nav("/app/map");
+
   const peoplePlacesActivity = [
     ...hangouts.map((hangout, index) => {
       const creatorName = getHangoutCreatorName(hangout);
@@ -323,6 +349,82 @@ export default function Home() {
     socket.on("message:new", onNewMessage);
     return () => socket.off("message:new", onNewMessage);
   }, [accessToken]);
+
+  useEffect(() => {
+    if (!mapboxToken) return;
+    mapboxgl.accessToken = mapboxToken;
+  }, [mapboxToken]);
+
+  useEffect(() => {
+    if (!mapboxToken || !coords) return;
+    if (!mapPreviewContainerRef.current || mapPreviewRef.current) return;
+
+    const map = new mapboxgl.Map({
+      container: mapPreviewContainerRef.current,
+      style: "mapbox://styles/mapbox/light-v11",
+      center: [coords.lng, coords.lat],
+      zoom: 12,
+      interactive: false,
+      attributionControl: true,
+    });
+
+    map.on("load", () => {
+      setMapPreviewLoaded(true);
+    });
+
+    mapPreviewRef.current = map;
+
+    return () => {
+      setMapPreviewLoaded(false);
+      mapPreviewMarkersRef.current.forEach((marker) => marker.remove());
+      mapPreviewMarkersRef.current = [];
+      mapPreviewRef.current = null;
+      map.remove();
+    };
+  }, [coords, mapboxToken]);
+
+  useEffect(() => {
+    if (!mapPreviewRef.current || !coords) return;
+    mapPreviewRef.current.setCenter([coords.lng, coords.lat]);
+  }, [coords]);
+
+  useEffect(() => {
+    if (!mapPreviewRef.current || !mapPreviewLoaded || !coords) return;
+
+    mapPreviewMarkersRef.current.forEach((marker) => marker.remove());
+    mapPreviewMarkersRef.current = [];
+    const pointsForBounds = [[coords.lng, coords.lat]];
+
+    const userEl = document.createElement("div");
+    userEl.className = "home-map-user-marker";
+    mapPreviewMarkersRef.current.push(
+      new mapboxgl.Marker({ element: userEl }).setLngLat([coords.lng, coords.lat]).addTo(mapPreviewRef.current)
+    );
+
+    (hangouts || []).slice(0, 24).forEach((hangout) => {
+      const point = hangout?.location?.coordinates;
+      if (!Array.isArray(point) || point.length < 2) return;
+      const lng = Number(point[0]);
+      const lat = Number(point[1]);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+      const status = getSnapshotStatus(hangout);
+      const markerEl = document.createElement("div");
+      markerEl.className = `home-map-hangout-marker home-map-hangout-marker-${status}`;
+      markerEl.title = hangout?.title || "Hangout";
+      pointsForBounds.push([lng, lat]);
+      mapPreviewMarkersRef.current.push(
+        new mapboxgl.Marker({ element: markerEl }).setLngLat([lng, lat]).addTo(mapPreviewRef.current)
+      );
+    });
+
+    if (pointsForBounds.length > 1) {
+      const bounds = new mapboxgl.LngLatBounds(pointsForBounds[0], pointsForBounds[0]);
+      pointsForBounds.slice(1).forEach((point) => bounds.extend(point));
+      mapPreviewRef.current.fitBounds(bounds, { padding: 44, maxZoom: 14, duration: 0 });
+    } else {
+      mapPreviewRef.current.jumpTo({ center: [coords.lng, coords.lat], zoom: 12 });
+    }
+  }, [coords, hangouts, mapPreviewLoaded]);
 
   useEffect(() => {
     if (!accessToken || !coords) return;
@@ -451,14 +553,47 @@ export default function Home() {
 
         <section className="home-card home-map-card home-map">
           <div className="home-card-header">
-            <h3>Map Preview</h3>
-            <span className="home-chip">Within 5km</span>
+            <h3>Nearby Snapshot</h3>
+            <span className="home-chip home-snapshot-chip">
+              {snapshotActiveCount} active • {nearbyRadiusKm}km
+            </span>
           </div>
-          <div className="home-map-preview">
-            <span className="home-map-pin home-map-pin-blue" />
-            <span className="home-map-pin home-map-pin-blue home-map-pin-two" />
-            <span className="home-map-pin home-map-pin-green" />
-            <div className="home-map-overlay">Nearby hangouts</div>
+          <div
+            className="home-map-snapshot home-map-preview-mapbox"
+            role="button"
+            tabIndex={0}
+            onClick={openMapPage}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openMapPage();
+              }
+            }}
+            aria-label="Open full map"
+          >
+            <div className="home-map-snapshot-legend">
+              <div><span className="home-map-legend-dot home-map-legend-you" /> You</div>
+              <div><span className="home-map-legend-dot" /> Hangout</div>
+              <div><span className="home-map-legend-ring" /> Ongoing</div>
+            </div>
+            <div ref={mapPreviewContainerRef} className="home-map-canvas" />
+            <div className="home-map-snapshot-actions">
+              <button
+                type="button"
+                className="home-map-open-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openMapPage();
+                }}
+              >
+                Open map
+              </button>
+            </div>
+            {!mapboxToken && (
+              <div className="home-map-overlay-message">
+                Missing Mapbox token. Set <code>VITE_MAPBOX_TOKEN</code>.
+              </div>
+            )}
           </div>
           <div className="home-map-footer">
             Preview only. Open the map to explore live pins.
