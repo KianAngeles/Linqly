@@ -26,6 +26,7 @@
 .auth-split-form-col {
   min-width: 0;
   grid-row: 1;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -125,6 +126,43 @@
   text-decoration: underline;
 }
 
+.auth-form-back {
+  position: absolute;
+  top: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: #111111;
+  border-radius: 0;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.auth-form-back-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  display: block;
+}
+
+.auth-form-back:hover,
+.auth-form-back:focus {
+  color: #111111;
+  text-decoration: underline;
+}
+
+.auth-form-back-left {
+  left: 18px;
+}
+
+.auth-form-back-right {
+  right: 18px;
+}
+
 .auth-custom-select {
   position: relative;
 }
@@ -195,6 +233,30 @@
   background: #efefef;
   color: #111111;
   font-weight: 600;
+}
+
+.auth-register-top-error {
+  border: 1px solid #d4d4d4;
+  background: #f2f2f2;
+  color: #222222;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 0.92rem;
+}
+
+.auth-field-state {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.auth-field-state.is-error {
+  color: #8a3d3d;
+}
+
+.auth-field-state.is-success {
+  color: #2f7b3a;
 }
 
 .auth-split-visual-col {

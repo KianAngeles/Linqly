@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "../store/AuthContext";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import AuthSplitLayout from "../components/auth/AuthSplitLayout";
+import leftArrowIcon from "../assets/icons/left-arrow.png";
 
 export default function Login() {
   const nav = useNavigate();
@@ -35,6 +36,10 @@ export default function Login() {
       panelHeading="Welcome back"
       panelText="Sign in to continue messaging, planning hangouts, and checking updates."
     >
+      <Link className="auth-form-back auth-form-back-left" to="/">
+        <img src={leftArrowIcon} alt="" aria-hidden="true" className="auth-form-back-icon" />
+        Back
+      </Link>
       {err && <div className="alert alert-danger">{err}</div>}
       <form onSubmit={onSubmit}>
         <div className="mb-3">

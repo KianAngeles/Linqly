@@ -8,6 +8,7 @@ const {
 } = require("../utils/jwt");
 const { authRequired } = require("../middleware/authRequired");
 const { validatePassword } = require("../utils/passwordRules");
+const { validateRegister } = require("../middleware/validateRegister");
 const { sendPasswordResetEmail } = require("../utils/mailer");
 const { resolveAvatar } = require("../utils/avatar");
 const { normalizeUsername, isUsernameValid } = require("../utils/username");
@@ -42,25 +43,13 @@ const forgotLimiter = rateLimit({
 
 
 // POST /auth/register
-router.post("/register", async (req, res) => {
+router.post("/register", validateRegister, async (req, res) => {
   const { username, email, password, gender, displayName } = req.body;
-
-  if (!displayName || !username || !email || !password)
-    return res
-      .status(400)
-      .json({ message: "displayName, username, email, password required" });
 
   const normalized = normalizeUsername(username);
   if (!isUsernameValid(normalized)) {
     return res.status(400).json({
       message: "Username must be 3-30 characters and contain only letters, numbers, or underscore.",
-    });
-  }
-
-  if (!validatePassword(password)) {
-    return res.status(400).json({
-      message:
-        "Password must be 8+ chars with 1 uppercase, 1 lowercase, and 1 special character.",
     });
   }
 
