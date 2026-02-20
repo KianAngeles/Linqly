@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -6,6 +6,7 @@ import { useAuth } from "../store/AuthContext";
 import { chatsApi } from "../api/chats.api";
 import { hangoutsApi } from "../api/hangouts.api";
 import { friendsApi } from "../api/friends.api";
+import { API_BASE } from "../api/http";
 import { socket } from "../socket";
 import NotificationsList from "../components/notifications/NotificationsList";
 import { useNotificationsDropdownData } from "../hooks/useNotificationsDropdownData";
@@ -14,15 +15,20 @@ import friendsIcon from "../assets/icons/sidebar-icons/friends.png";
 import mapIcon from "../assets/icons/sidebar-icons/map.png";
 import messengerIcon from "../assets/icons/sidebar-icons/messenger.png";
 
+const MAP_STYLE_LIGHT = "mapbox://styles/mapbox/light-v11";
+const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11";
 
 export default function Home() {
   const nav = useNavigate();
   const { user, accessToken } = useAuth();
-  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN || "", []);
   const mapPreviewContainerRef = useRef(null);
   const mapPreviewRef = useRef(null);
+  const currentMapStyleRef = useRef("");
   const mapPreviewMarkersRef = useRef([]);
+  const [mapTheme, setMapTheme] = useState(() =>
+    document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light"
+  );
   const [mapPreviewLoaded, setMapPreviewLoaded] = useState(false);
   const [chats, setChats] = useState([]);
   const [chatError, setChatError] = useState("");
@@ -33,6 +39,8 @@ export default function Home() {
   const [locationLoading, setLocationLoading] = useState(true);
   const [locationReady, setLocationReady] = useState(false);
   const [presence, setPresence] = useState({ onlineFriends: 0, totalFriends: 0 });
+  const [nowMs, setNowMs] = useState(0);
+  const mapStyleUrl = mapTheme === "dark" ? MAP_STYLE_DARK : MAP_STYLE_LIGHT;
   const nearbyRadiusKm = 5;
   const {
     visibleNotifications,
@@ -51,11 +59,11 @@ export default function Home() {
   });
 
   const greeting = useMemo(() => {
-    const hour = new Date().getHours();
+    const hour = new Date(nowMs || 0).getHours();
     if (hour < 12) return "Good morning";
     if (hour < 18) return "Good afternoon";
     return "Good evening";
-  }, []);
+  }, [nowMs]);
 
   const getInitial = (value) => {
     if (!value) return "H";
@@ -106,7 +114,7 @@ export default function Home() {
     if (!timestamp) return "";
     const createdAt = new Date(timestamp).getTime();
     if (Number.isNaN(createdAt)) return "";
-    const diffMs = Math.max(0, Date.now() - createdAt);
+    const diffMs = Math.max(0, nowMs - createdAt);
     const hourMs = 60 * 60 * 1000;
     const dayMs = 24 * hourMs;
     const weekMs = 7 * dayMs;
@@ -185,8 +193,8 @@ export default function Home() {
 
   const formatHangoutTitle = (value) => {
     const title = String(value || "Untitled");
-    if (title.length <= 27) return title;
-    return `${title.slice(0, 27)}....`;
+    if (title.length <= 25) return title;
+    return `${title.slice(0, 25)}....`;
   };
 
   const getHangoutJoinedCount = (hangout) => {
@@ -202,17 +210,17 @@ export default function Home() {
     return 0;
   };
 
-  const isHangoutOngoing = (hangout) => {
+  const isHangoutOngoing = useCallback((hangout) => {
     if (hangout?.ongoing === true) return true;
     if (String(hangout?.status || "").toLowerCase() === "ongoing") return true;
     const startsAt = hangout?.startsAt ? new Date(hangout.startsAt).getTime() : NaN;
     const endsAt = hangout?.endsAt ? new Date(hangout.endsAt).getTime() : NaN;
-    const now = Date.now();
+    const now = nowMs;
     if (!Number.isNaN(startsAt) && !Number.isNaN(endsAt)) {
       return now >= startsAt && now <= endsAt;
     }
     return false;
-  };
+  }, [nowMs]);
 
   const truncateText = (value, maxLength = 52) => {
     const text = String(value || "");
@@ -251,22 +259,22 @@ export default function Home() {
     return objectIdToIsoTime(hangout?._id);
   };
 
-  const getSnapshotStatus = (hangout) => {
+  const getSnapshotStatus = useCallback((hangout) => {
     if (isHangoutOngoing(hangout)) return "ongoing";
     const startsAtMs = hangout?.startsAt ? new Date(hangout.startsAt).getTime() : NaN;
     if (!Number.isNaN(startsAtMs)) {
-      const delta = startsAtMs - Date.now();
+      const delta = startsAtMs - nowMs;
       if (delta > 0 && delta <= 60 * 60 * 1000) return "starting-soon";
     }
     return "idle";
-  };
+  }, [isHangoutOngoing, nowMs]);
 
   const snapshotActiveCount = useMemo(() => {
-    const statuses = (hangouts || []).map(getSnapshotStatus);
+    const statuses = (hangouts || []).map((hangout) => getSnapshotStatus(hangout));
     const active = statuses.filter((status) => status === "ongoing" || status === "starting-soon")
       .length;
     return active > 0 ? active : statuses.length;
-  }, [hangouts]);
+  }, [hangouts, getSnapshotStatus]);
 
   const openMapPage = () => nav("/app/map");
 
@@ -310,9 +318,25 @@ export default function Home() {
     .slice(0, 8);
 
   useEffect(() => {
+    const tick = () => setNowMs(new Date().getTime());
+    tick();
+    const timer = window.setInterval(tick, 30 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (typeof MutationObserver === "undefined") return undefined;
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      const nextTheme = root.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      setMapTheme((prev) => (prev === nextTheme ? prev : nextTheme));
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     if (!navigator.geolocation) {
-      setLocationReady(false);
-      setLocationLoading(false);
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -328,17 +352,17 @@ export default function Home() {
     );
   }, []);
 
-  const loadChats = () => {
+  const loadChats = useCallback(() => {
     if (!accessToken) return;
     chatsApi
       .list(accessToken)
       .then((data) => setChats(data.chats || []))
       .catch((err) => setChatError(err.message || "Failed to load chats"));
-  };
+  }, [accessToken]);
 
   useEffect(() => {
     loadChats();
-  }, [accessToken]);
+  }, [loadChats]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -348,7 +372,7 @@ export default function Home() {
 
     socket.on("message:new", onNewMessage);
     return () => socket.off("message:new", onNewMessage);
-  }, [accessToken]);
+  }, [accessToken, loadChats]);
 
   useEffect(() => {
     if (!mapboxToken) return;
@@ -361,12 +385,13 @@ export default function Home() {
 
     const map = new mapboxgl.Map({
       container: mapPreviewContainerRef.current,
-      style: "mapbox://styles/mapbox/light-v11",
+      style: mapStyleUrl,
       center: [coords.lng, coords.lat],
       zoom: 12,
       interactive: false,
       attributionControl: true,
     });
+    currentMapStyleRef.current = mapStyleUrl;
 
     map.on("load", () => {
       setMapPreviewLoaded(true);
@@ -381,7 +406,16 @@ export default function Home() {
       mapPreviewRef.current = null;
       map.remove();
     };
-  }, [coords, mapboxToken]);
+  }, [coords, mapboxToken, mapStyleUrl]);
+
+  useEffect(() => {
+    const map = mapPreviewRef.current;
+    if (!map) return;
+    if (currentMapStyleRef.current === mapStyleUrl) return;
+    currentMapStyleRef.current = mapStyleUrl;
+    setMapPreviewLoaded(false);
+    map.setStyle(mapStyleUrl);
+  }, [mapStyleUrl]);
 
   useEffect(() => {
     if (!mapPreviewRef.current || !coords) return;
@@ -424,7 +458,7 @@ export default function Home() {
     } else {
       mapPreviewRef.current.jumpTo({ center: [coords.lng, coords.lat], zoom: 12 });
     }
-  }, [coords, hangouts, mapPreviewLoaded]);
+  }, [coords, hangouts, mapPreviewLoaded, getSnapshotStatus]);
 
   useEffect(() => {
     if (!accessToken || !coords) return;
@@ -504,7 +538,19 @@ export default function Home() {
           {hangoutsError && <div className="home-error">{hangoutsError}</div>}
           <div className="home-list">
             {hangouts.slice(0, 5).map((h) => (
-              <div key={h._id} className="home-list-item">
+              <div
+                key={h._id}
+                className="home-list-item"
+                role="button"
+                tabIndex={0}
+                onClick={() => nav(getHangoutMapLink(h))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    nav(getHangoutMapLink(h));
+                  }
+                }}
+              >
                 {getHangoutCreatorAvatar(h) ? (
                   <img
                     src={getHangoutCreatorAvatar(h)}
@@ -542,7 +588,11 @@ export default function Home() {
                       ? h.timeLabel || formatDateTime(h.startsAt) || "Time TBD"
                       : `Scheduled: ${h.timeLabel || formatDateTime(h.startsAt) || "Time TBD"}`}
                   </div>
-                  <Link to={getHangoutMapLink(h)} className="home-join-btn">
+                  <Link
+                    to={getHangoutMapLink(h)}
+                    className="home-join-btn"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {isHangoutOngoing(h) ? "Join now" : "Join"}
                   </Link>
                 </div>

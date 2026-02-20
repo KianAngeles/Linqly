@@ -446,6 +446,27 @@
   padding: 12px 16px 16px;
 }
 
+.friends-modal-close-x {
+  border: none;
+  background: transparent;
+  color: rgba(15, 23, 42, 0.72);
+  font-size: 1.2rem;
+  line-height: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.friends-modal-close-x:hover,
+.friends-modal-close-x:focus-visible {
+  color: rgba(15, 23, 42, 0.95);
+  background: rgba(15, 23, 42, 0.08);
+}
+
 .friends-back-btn {
   border: none;
   background: transparent;
@@ -778,5 +799,309 @@
 
   .friends-user-search {
     width: 100%;
+  }
+}
+
+/* Dark overrides */
+html[data-theme="dark"] .friends-page {
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-page h3,
+html[data-theme="dark"] .friends-page h5,
+html[data-theme="dark"] .friends-page .fw-semibold,
+html[data-theme="dark"] .friends-page .friends-profile-name,
+html[data-theme="dark"] .friends-page .friends-list-name,
+html[data-theme="dark"] .friends-page .friends-request-name,
+html[data-theme="dark"] .friends-page .friends-user-search-item-name {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-page .friends-card {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+}
+
+html[data-theme="dark"] .friends-page .friends-divider,
+html[data-theme="dark"] .friends-page .friends-tabs {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .friends-page .friends-profile-handle,
+html[data-theme="dark"] .friends-page .friends-profile-bio,
+html[data-theme="dark"] .friends-page .friends-profile-label,
+html[data-theme="dark"] .friends-page .friends-subtitle,
+html[data-theme="dark"] .friends-page .friends-request-handle,
+html[data-theme="dark"] .friends-page .friends-request-mutual,
+html[data-theme="dark"] .friends-page .friends-search-ellipsis,
+html[data-theme="dark"] .friends-page .friends-empty,
+html[data-theme="dark"] .friends-page .friends-user-search-header,
+html[data-theme="dark"] .friends-page .friends-user-search-empty,
+html[data-theme="dark"] .friends-page .friends-user-search-item-meta,
+html[data-theme="dark"] .friends-page .text-muted {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .friends-page .friends-avatar-fallback {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-page .friends-online-dot {
+  border-color: var(--surface);
+}
+
+html[data-theme="dark"] .friends-page .friends-search-input input,
+html[data-theme="dark"] .friends-page .friends-user-search-input,
+html[data-theme="dark"] .friends-page .form-control {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .friends-page .friends-search-input input::placeholder,
+html[data-theme="dark"] .friends-page .friends-user-search-input::placeholder,
+html[data-theme="dark"] .friends-page .form-control::placeholder {
+  color: var(--text-subtle);
+}
+
+html[data-theme="dark"] .friends-page .friends-search-input input:focus,
+html[data-theme="dark"] .friends-page .friends-user-search-input:focus,
+html[data-theme="dark"] .friends-page .form-control:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .friends-page .friends-search-icon img,
+html[data-theme="dark"] .friends-page .friends-user-search-icon img {
+  filter: brightness(0) invert(1);
+  opacity: 0.85;
+}
+
+html[data-theme="dark"] .friends-page .friends-list-item,
+html[data-theme="dark"] .friends-page .friends-request-item {
+  background: transparent;
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-page .friends-request-item {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .friends-page .friends-list-item-clickable:hover,
+html[data-theme="dark"] .friends-page .friends-request-item-clickable:hover {
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .friends-page .friends-list-item-clickable.is-active {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+html[data-theme="dark"] .friends-page .friends-list-action,
+html[data-theme="dark"] .friends-page .friends-list-action-icon {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .friends-page .friends-list-action img,
+html[data-theme="dark"] .friends-page .friends-list-action-icon img,
+html[data-theme="dark"] .friends-page .friends-request-mutual img,
+html[data-theme="dark"] .friends-page .friends-pending-badge img,
+html[data-theme="dark"] .friends-page .friends-add-btn img {
+  filter: brightness(0) invert(1);
+}
+
+html[data-theme="dark"] .friends-page .friends-list-action:hover,
+html[data-theme="dark"] .friends-page .friends-list-action:focus-visible,
+html[data-theme="dark"] .friends-page .friends-list-action-icon:hover,
+html[data-theme="dark"] .friends-page .friends-list-action-icon:focus-visible {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .friends-page .friends-list-menu,
+html[data-theme="dark"] .friends-page .friends-user-search-dropdown {
+  background: var(--surface-2);
+  border-color: var(--border);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="dark"] .friends-page .friends-list-menu-item,
+html[data-theme="dark"] .friends-page .friends-user-search-item {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-page .friends-list-menu-item:hover,
+html[data-theme="dark"] .friends-page .friends-list-menu-item:focus-visible,
+html[data-theme="dark"] .friends-page .friends-user-search-item:hover,
+html[data-theme="dark"] .friends-page .friends-user-search-item.is-active {
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .friends-page .friends-tab {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .friends-page .friends-tab.is-active {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-page .friends-tab.is-active::after {
+  background: var(--text);
+}
+
+html[data-theme="dark"] .friends-page .friends-tab-badge {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+html[data-theme="dark"] .friends-page .friends-add-btn,
+html[data-theme="dark"] .friends-page .friends-status-badge {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .friends-page .friends-add-btn:hover {
+  background: var(--bg-muted);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+html[data-theme="dark"] .friends-page .friends-pending-badge {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+html[data-theme="dark"] .friends-page .btn-dark {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-page .btn-dark:hover,
+html[data-theme="dark"] .friends-page .btn-dark:focus {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-page .btn-outline-secondary,
+html[data-theme="dark"] .friends-page .btn-outline-dark {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .friends-page .btn-outline-secondary:hover,
+html[data-theme="dark"] .friends-page .btn-outline-dark:hover,
+html[data-theme="dark"] .friends-page .btn-outline-secondary:focus,
+html[data-theme="dark"] .friends-page .btn-outline-dark:focus {
+  background: var(--bg-muted);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .friends-page .friends-search-page-btn {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .friends-page .friends-search-page-btn:hover {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-page .friends-search-page-btn.is-active {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .friends-page .friends-user-search-item-indicator {
+  border-color: var(--border);
+  color: var(--text-muted);
+  background: transparent;
+}
+
+html[data-theme="dark"] .friends-page .friends-user-search-item-indicator.is-friend {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-page .friends-empty img {
+  filter: grayscale(1) brightness(0) invert(1);
+  opacity: 1;
+}
+
+html[data-theme="dark"] .friends-page .friends-back-btn {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .friends-page .friends-back-btn:hover,
+html[data-theme="dark"] .friends-page .friends-back-btn:focus-visible {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .friends-modal-overlay {
+  background: rgba(4, 8, 14, 0.66);
+}
+
+html[data-theme="dark"] .friends-modal {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.36);
+}
+
+html[data-theme="dark"] .friends-modal-header,
+html[data-theme="dark"] .friends-modal-footer {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .friends-modal .btn-link {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .friends-modal .btn-link:hover,
+html[data-theme="dark"] .friends-modal .btn-link:focus {
+  color: var(--text) !important;
+  text-decoration: none;
+  background: var(--bg-muted);
+  border-radius: 8px;
+}
+
+html[data-theme="dark"] .friends-modal .friends-modal-close-x {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .friends-modal .friends-modal-close-x:hover,
+html[data-theme="dark"] .friends-modal .friends-modal-close-x:focus-visible {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .friends-modal .btn-danger {
+  background: rgba(127, 29, 29, 0.2);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fca5a5;
+}
+
+html[data-theme="dark"] .friends-modal .btn-danger:hover,
+html[data-theme="dark"] .friends-modal .btn-danger:focus {
+  background: rgba(185, 28, 28, 0.3);
+  border-color: rgba(252, 165, 165, 0.62);
+  color: #fecaca;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="dark"] .friends-page .friends-list-item-clickable,
+  html[data-theme="dark"] .friends-page .friends-request-item-clickable,
+  html[data-theme="dark"] .friends-page .friends-list-actions,
+  html[data-theme="dark"] .friends-modal {
+    transition: none !important;
   }
 }

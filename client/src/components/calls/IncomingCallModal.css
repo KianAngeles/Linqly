@@ -20,6 +20,11 @@
   gap: 16px;
 }
 
+.incoming-call-avatar {
+  display: flex;
+  justify-content: center;
+}
+
 .incoming-call-avatar img {
   width: 96px;
   height: 96px;

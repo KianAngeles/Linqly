@@ -1,3 +1,4 @@
+/* Light (existing) */
 .profile-page {
   max-width: 1200px;
   margin: 0 auto;
@@ -564,6 +565,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+  align-items: stretch;
 }
 
 .profile-friend {
@@ -572,6 +574,8 @@
   padding: 12px;
   text-align: center;
   transition: transform 160ms ease, box-shadow 160ms ease;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .profile-friend:hover {
@@ -595,16 +599,64 @@
 
 .profile-friend-avatar-placeholder {
   background: rgba(15, 23, 42, 0.08);
+  color: #111827;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1.4rem;
 }
 
 .profile-friend-name {
   font-weight: 600;
-  font-size: 1.3rem;
+  font-size: 1.02rem;
+  line-height: 1.25;
+  margin-bottom: 2px;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .profile-friend-handle {
   font-size: 0.9rem;
   color: rgba(15, 23, 42, 0.6);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1199px) {
+  .profile-friends-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767.98px) {
+  .profile-friends-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .profile-friend {
+    padding: 10px;
+  }
+
+  .profile-friend-avatar-wrap,
+  .profile-friend-avatar {
+    width: 64px;
+    height: 64px;
+  }
+
+  .profile-friend-name {
+    font-size: 0.95rem;
+  }
+
+  .profile-friend-handle {
+    font-size: 0.82rem;
+  }
 }
 
 .profile-map-placeholder {
@@ -939,6 +991,43 @@
   align-self: center;
 }
 
+.profile-hangouts-header-actions {
+  min-width: 0;
+}
+
+@media (max-width: 565px) {
+  .profile-hangouts-header {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 8px;
+  }
+
+  .profile-hangouts-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .profile-hangouts-header-actions .profile-chip {
+    flex: 0 0 100%;
+    width: 100%;
+    margin: 0 auto;
+    text-align: center;
+    display: inline-flex;
+    justify-content: center;
+  }
+
+  .profile-hangouts-view-toggle {
+    flex: 0 0 100%;
+    width: 100%;
+  }
+
+  .profile-hangouts-view-toggle .btn {
+    flex: 1 1 0;
+  }
+}
+
 @keyframes hangoutsPageIn {
   from {
     opacity: 0;
@@ -997,6 +1086,27 @@
   align-items: center;
   padding: 16px 20px;
   border-bottom: 1px solid rgba(233, 236, 239, 1);
+}
+
+.profile-modal-close-x {
+  border: none;
+  background: transparent;
+  color: rgba(15, 23, 42, 0.72);
+  font-size: 1.2rem;
+  line-height: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.profile-modal-close-x:hover,
+.profile-modal-close-x:focus-visible {
+  color: rgba(15, 23, 42, 0.95);
+  background: rgba(15, 23, 42, 0.08);
 }
 
 .profile-modal-body {
@@ -1213,5 +1323,447 @@
 
   .profile-more-btn {
     width: 100%;
+  }
+}
+
+@media (max-width: 449.98px) {
+  .profile-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-start;
+    border-radius: 16px;
+    overflow: visible;
+  }
+
+  .profile-tab-slider {
+    display: none;
+  }
+
+  .profile-tab {
+    flex: 0 0 calc(50% - 3px);
+    padding: 8px 10px;
+    border: 1px solid transparent;
+  }
+
+  .profile-tab:nth-of-type(3) {
+    flex-basis: 100%;
+  }
+
+  .profile-tab.is-active {
+    background: #0f172a;
+    color: #fff;
+    border-color: #0f172a;
+  }
+}
+
+/* Dark overrides */
+html[data-theme="dark"] .profile-page {
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page h3,
+html[data-theme="dark"] .profile-page h5,
+html[data-theme="dark"] .profile-page .fw-semibold,
+html[data-theme="dark"] .profile-page .profile-name,
+html[data-theme="dark"] .profile-page .profile-info-value,
+html[data-theme="dark"] .profile-page .profile-hangout-title,
+html[data-theme="dark"] .profile-page .profile-friend-name {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-card {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="dark"] .profile-page .profile-skeleton {
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0.08) 8%,
+    rgba(255, 255, 255, 0.14) 18%,
+    rgba(255, 255, 255, 0.08) 33%
+  );
+  background-size: 200% 100%;
+}
+
+html[data-theme="dark"] .profile-page .profile-divider,
+html[data-theme="dark"] .profile-page .profile-info-row,
+html[data-theme="dark"] .profile-page .profile-hangout-row {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .profile-page .profile-handle,
+html[data-theme="dark"] .profile-page .profile-bio,
+html[data-theme="dark"] .profile-page .profile-empty,
+html[data-theme="dark"] .profile-page .profile-stat-label,
+html[data-theme="dark"] .profile-page .profile-info-label,
+html[data-theme="dark"] .profile-page .profile-chip,
+html[data-theme="dark"] .profile-page .profile-map-subtitle,
+html[data-theme="dark"] .profile-page .profile-map-empty-text,
+html[data-theme="dark"] .profile-page .profile-friend-handle,
+html[data-theme="dark"] .profile-page .profile-hangout-meta,
+html[data-theme="dark"] .profile-page .profile-edit-helper,
+html[data-theme="dark"] .profile-page .profile-char-count,
+html[data-theme="dark"] .profile-page .profile-mini-item,
+html[data-theme="dark"] .profile-page .profile-mini-empty,
+html[data-theme="dark"] .profile-page .profile-hangouts-ellipsis,
+html[data-theme="dark"] .profile-page .text-muted {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .profile-page .profile-avatar-placeholder,
+html[data-theme="dark"] .profile-page .profile-friend-avatar-placeholder,
+html[data-theme="dark"] .profile-page .profile-mini-icon,
+html[data-theme="dark"] .profile-page .profile-info-icon {
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-avatar-edit-bg {
+  background: rgba(7, 7, 11, 0.72);
+}
+
+html[data-theme="dark"] .profile-page .profile-online-dot {
+  border-color: var(--surface);
+}
+
+html[data-theme="dark"] .profile-page .profile-edit-icon img,
+html[data-theme="dark"] .profile-page .profile-avatar-edit-icon,
+html[data-theme="dark"] .profile-page .profile-mini-icon img,
+html[data-theme="dark"] .profile-page .profile-info-icon img,
+html[data-theme="dark"] .profile-page .profile-hangout-icon img,
+html[data-theme="dark"] .profile-page .profile-hangout-trash img {
+  filter: brightness(0) invert(1);
+}
+
+html[data-theme="dark"] .profile-page .profile-about-card {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .profile-page .profile-about-text {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-tags .profile-tag,
+html[data-theme="dark"] .profile-page .profile-tag {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-tabs {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .profile-page .profile-tab {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-tab:hover {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-tab.is-active {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-tab-slider {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+}
+
+@media (max-width: 449.98px) {
+  html[data-theme="dark"] .profile-page .profile-tab.is-active {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+}
+
+html[data-theme="dark"] .profile-page .profile-menu-dropdown,
+html[data-theme="dark"] .profile-page .profile-pending-dropdown {
+  background: var(--surface-2);
+  border-color: var(--border);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36);
+}
+
+html[data-theme="dark"] .profile-page .profile-menu-item,
+html[data-theme="dark"] .profile-page .profile-pending-item {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-menu-item:hover,
+html[data-theme="dark"] .profile-page .profile-menu-item:focus-visible,
+html[data-theme="dark"] .profile-page .profile-pending-item:hover,
+html[data-theme="dark"] .profile-page .profile-pending-item:focus-visible {
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-map-preview {
+  background: var(--surface-2);
+  border-color: var(--border);
+  box-shadow: 0 20px 36px rgba(0, 0, 0, 0.3);
+}
+
+html[data-theme="dark"] .profile-page .profile-map-empty {
+  background: rgba(7, 7, 11, 0.82);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-map-empty-icon {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .profile-page .profile-map-pin {
+  box-shadow: 0 0 0 2px rgba(7, 7, 11, 0.92);
+}
+
+html[data-theme="dark"] .profile-page .profile-map-pin-created {
+  background: var(--text);
+  border-color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-map-pin-joined {
+  border-color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-map-pin.is-live::after {
+  border-color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-map-canvas .mapboxgl-canvas {
+  filter: grayscale(1) saturate(0) brightness(0.82) contrast(1.06);
+}
+
+html[data-theme="dark"] .profile-page .profile-friend {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .profile-page .profile-friend:hover {
+  box-shadow: 0 12px 22px rgba(0, 0, 0, 0.26);
+}
+
+html[data-theme="dark"] .profile-page .profile-hangout-card {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .profile-page .profile-hangout-card:hover {
+  background: var(--surface-2);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.26);
+}
+
+html[data-theme="dark"] .profile-page .profile-hangout-pill.is-open {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-hangout-pill.is-closed {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-hangouts-page-btn {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-hangouts-page-btn:hover {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-hangouts-page-btn.is-active {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .profile-page .btn-dark {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .btn-dark:hover,
+html[data-theme="dark"] .profile-page .btn-dark:focus {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .btn-outline-dark,
+html[data-theme="dark"] .profile-page .btn-outline-secondary {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .profile-page .btn-outline-dark:hover,
+html[data-theme="dark"] .profile-page .btn-outline-secondary:hover,
+html[data-theme="dark"] .profile-page .btn-outline-dark:focus,
+html[data-theme="dark"] .profile-page .btn-outline-secondary:focus {
+  background: var(--bg-muted);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal-overlay {
+  background: rgba(4, 8, 14, 0.68);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 26px 58px rgba(0, 0, 0, 0.38);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal-header,
+html[data-theme="dark"] .profile-page .profile-modal-footer {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .btn-link {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .btn-link:hover,
+html[data-theme="dark"] .profile-page .profile-modal .btn-link:focus {
+  color: var(--text) !important;
+  background: var(--bg-muted);
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-modal-close-x {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-modal-close-x:hover,
+html[data-theme="dark"] .profile-page .profile-modal .profile-modal-close-x:focus-visible {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .form-control,
+html[data-theme="dark"] .profile-page .profile-modal .form-select,
+html[data-theme="dark"] .profile-page .profile-modal .form-range,
+html[data-theme="dark"] .profile-page .profile-modal .MuiInputBase-root {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .form-control::placeholder,
+html[data-theme="dark"] .profile-page .profile-modal .form-select::placeholder,
+html[data-theme="dark"] .profile-page .profile-modal .MuiInputBase-input::placeholder {
+  color: var(--text-subtle);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .form-control:focus,
+html[data-theme="dark"] .profile-page .profile-modal .form-select:focus,
+html[data-theme="dark"] .profile-page .profile-modal .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: var(--border-strong) !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .MuiOutlinedInput-notchedOutline {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .MuiSvgIcon-root,
+html[data-theme="dark"] .profile-page .profile-modal .MuiInputBase-input,
+html[data-theme="dark"] .profile-page .profile-modal .MuiInputLabel-root {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .form-select:disabled,
+html[data-theme="dark"] .profile-page .profile-modal .form-control:disabled {
+  background: var(--bg-muted);
+  color: var(--text-subtle);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-interest-option {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-interest-option:hover,
+html[data-theme="dark"] .profile-page .profile-modal .profile-interest-option:focus-visible {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-interest-option.is-selected {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-privacy-option {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-privacy-option.is-active {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-avatar-preview {
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-tag {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-tag-remove {
+  background: var(--bg-muted) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .profile-tag-remove::before {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .btn-danger {
+  background: rgba(127, 29, 29, 0.2);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fca5a5;
+}
+
+html[data-theme="dark"] .profile-page .profile-modal .btn-danger:hover,
+html[data-theme="dark"] .profile-page .profile-modal .btn-danger:focus {
+  background: rgba(185, 28, 28, 0.3);
+  border-color: rgba(252, 165, 165, 0.62);
+  color: #fecaca;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="dark"] .profile-page .profile-friend,
+  html[data-theme="dark"] .profile-page .profile-hangout-card,
+  html[data-theme="dark"] .profile-page .profile-hangouts-page,
+  html[data-theme="dark"] .profile-page .profile-modal {
+    transition: none !important;
+    animation: none !important;
   }
 }

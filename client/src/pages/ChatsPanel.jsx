@@ -9,6 +9,7 @@ import { messagesApi } from "../api/messages.api";
 import { messageRequestsApi } from "../api/messageRequests.api";
 import { usersApi } from "../api/users.api";
 import { friendsApi } from "../api/friends.api";
+import { API_BASE } from "../api/http";
 import useChatsData from "../hooks/chats/useChatsData";
 import useMessagesData from "../hooks/chats/useMessagesData";
 import useGroupManagement from "../hooks/chats/useGroupManagement";
@@ -49,12 +50,12 @@ import moreIcon from "../assets/icons/more.png";
 import editIcon from "../assets/icons/edit.png";
 import darkSearchIcon from "../assets/icons/chat-settings-icons/dark-search.png";
 import darkNotificationIcon from "../assets/icons/chat-settings-icons/dark-notificaiton.png";
-import darkEditIcon from "../assets/icons/chat-settings-icons/dark-edit.png";
-import darkEditNicknameIcon from "../assets/icons/chat-settings-icons/dark-edit-nickname.png";
+import settingsEditIcon from "../assets/icons/chat-settings-icons/edit.png";
+import settingsNicknameIcon from "../assets/icons/chat-settings-icons/nickname.png";
 import darkMakeAdminIcon from "../assets/icons/chat-settings-icons/dark-make-admin.png";
 import darkRemoveIcon from "../assets/icons/chat-settings-icons/dark-remove.png";
 import darkAddMemberIcon from "../assets/icons/chat-settings-icons/dark-add-member.png";
-import darkImageIcon from "../assets/icons/chat-settings-icons/dark-image.png";
+import settingsImageIcon from "../assets/icons/chat-settings-icons/image.png";
 import profileIcon from "../assets/icons/chat-settings-icons/profile.png";
 import imageIcon from "../assets/icons/image.png";
 import micIcon from "../assets/icons/mic.png";
@@ -63,8 +64,17 @@ import notificationIcon from "../assets/icons/notification.png";
 import pinnedIcon from "../assets/icons/pinned.png";
 import searchIcon from "../assets/icons/search.png";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const CHAT_TWO_COLUMN_BREAKPOINT = 990;
+const CHAT_SINGLE_COLUMN_BREAKPOINT = 810;
 const INDEFINITE_MUTE_MS = 1000 * 60 * 60 * 24 * 365 * 10;
+const MUTE_DURATION_OPTIONS = [
+  { key: "5m", label: "5 mins", ms: 5 * 60 * 1000 },
+  { key: "15m", label: "15 mins", ms: 15 * 60 * 1000 },
+  { key: "30m", label: "30 mins", ms: 30 * 60 * 1000 },
+  { key: "1h", label: "1 hour", ms: 60 * 60 * 1000 },
+  { key: "4h", label: "4 hours", ms: 4 * 60 * 60 * 1000 },
+  { key: "forever", label: "Until turned off", ms: INDEFINITE_MUTE_MS },
+];
 
 export default function ChatsPanel() {
   const { accessToken, user, refreshChatSettings } = useAuth();
@@ -80,6 +90,16 @@ export default function ChatsPanel() {
   const [results, setResults] = useState([]);
   const [err, setErr] = useState("");
   const [messageRequests, setMessageRequests] = useState([]);
+  const [showChatSettingsPanel, setShowChatSettingsPanel] = useState(true);
+  const [isCompactTwoColumn, setIsCompactTwoColumn] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < CHAT_TWO_COLUMN_BREAKPOINT;
+  });
+  const [isSingleColumn, setIsSingleColumn] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < CHAT_SINGLE_COLUMN_BREAKPOINT;
+  });
+  const [mobileColumnView, setMobileColumnView] = useState("sidebar");
   const [requestActionBusy, setRequestActionBusy] = useState(false);
   const [friends, setFriends] = useState([]);
   const [showGroupForm, setShowGroupForm] = useState(false);
@@ -125,6 +145,34 @@ export default function ChatsPanel() {
     window.addEventListener("call:debug", onDebug);
     return () => window.removeEventListener("call:debug", onDebug);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handleResize = () => {
+      setIsCompactTwoColumn(window.innerWidth < CHAT_TWO_COLUMN_BREAKPOINT);
+      setIsSingleColumn(window.innerWidth < CHAT_SINGLE_COLUMN_BREAKPOINT);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (isCompactTwoColumn) {
+      setShowChatSettingsPanel(false);
+    }
+  }, [isCompactTwoColumn]);
+
+  useEffect(() => {
+    if (!isSingleColumn) return;
+    setMobileColumnView("sidebar");
+    setShowChatSettingsPanel(false);
+  }, [isSingleColumn]);
+
+  useEffect(() => {
+    if (!isSingleColumn) return;
+    if (selectedChatId) return;
+    setMobileColumnView("sidebar");
+  }, [isSingleColumn, selectedChatId]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -355,6 +403,57 @@ export default function ChatsPanel() {
     });
     return map;
   }, [selectedChat?.members]);
+
+  const showSidebarColumn = !isSingleColumn || mobileColumnView === "sidebar";
+  const showChatRoomColumn = isSingleColumn
+    ? mobileColumnView === "chat" && Boolean(selectedChatId)
+    : !isCompactTwoColumn || !showChatSettingsPanel;
+  const showSettingsColumn = isSingleColumn
+    ? mobileColumnView === "settings" && Boolean(selectedChatId)
+    : !isCompactTwoColumn
+      ? showChatSettingsPanel
+      : showChatSettingsPanel && Boolean(selectedChatId);
+  const chatRoomColClass = !isCompactTwoColumn
+    ? showChatSettingsPanel
+      ? "col-lg-6"
+      : "col-lg-9"
+    : "";
+  const rowLayoutClass = isSingleColumn
+    ? "is-single-col"
+    : isCompactTwoColumn
+      ? "is-compact-two-col"
+      : "";
+
+  const openChatView = useCallback(() => {
+    if (isSingleColumn) {
+      setMobileColumnView("chat");
+    }
+    if (isCompactTwoColumn) {
+      setShowChatSettingsPanel(false);
+    }
+  }, [isCompactTwoColumn, isSingleColumn]);
+
+  const toggleSettingsView = useCallback(() => {
+    if (isSingleColumn) {
+      setMobileColumnView((prev) => (prev === "settings" ? "chat" : "settings"));
+      return;
+    }
+    setShowChatSettingsPanel((prev) => !prev);
+  }, [isSingleColumn]);
+
+  const closeSettingsView = useCallback(() => {
+    if (isSingleColumn) {
+      setMobileColumnView("chat");
+      return;
+    }
+    setShowChatSettingsPanel(false);
+  }, [isSingleColumn]);
+
+  const handleBackToSidebar = useCallback(() => {
+    if (!isSingleColumn) return;
+    setMobileColumnView("sidebar");
+    setShowChatSettingsPanel(false);
+  }, [isSingleColumn]);
 
 
   useChatSocketEvents({
@@ -642,7 +741,7 @@ export default function ChatsPanel() {
       </div>
       {showMuteMenu && (
         <div className="chat-mute-menu">
-          {muteDurationOptions.map((opt) => (
+          {MUTE_DURATION_OPTIONS.map((opt) => (
             <button
               key={opt.key}
               type="button"
@@ -671,6 +770,17 @@ export default function ChatsPanel() {
       )}
     </div>
   ) : null;
+
+  const openMemberProfile = useCallback(
+    (member) => {
+      const username = String(member?.username || "")
+        .replace(/^@+/, "")
+        .trim();
+      if (!username) return;
+      navigate(`/app/profile/${encodeURIComponent(username)}`);
+    },
+    [navigate]
+  );
 
   const groupMembersSection = groupSettings ? (
     <AccordionSection
@@ -741,6 +851,10 @@ export default function ChatsPanel() {
           const isAdminMember = (groupSettings.admins || []).some(
             (a) => String(a.id) === String(m.id)
           );
+          const profileUsername = String(m?.username || "")
+            .replace(/^@+/, "")
+            .trim();
+          const canOpenProfile = Boolean(profileUsername);
           const isCreatorUser =
             String(groupSettings.creator?.id) === String(user?.id);
           const canRemove =
@@ -752,7 +866,27 @@ export default function ChatsPanel() {
           return (
             <div
               key={m.id}
-              className="list-group-item d-flex justify-content-between align-items-center"
+              className={`list-group-item d-flex justify-content-between align-items-center chat-settings-member-row ${
+                canOpenProfile ? "is-clickable" : ""
+              }`}
+              onClick={
+                canOpenProfile
+                  ? () => {
+                      openMemberProfile(m);
+                    }
+                  : undefined
+              }
+              role={canOpenProfile ? "button" : undefined}
+              tabIndex={canOpenProfile ? 0 : undefined}
+              onKeyDown={
+                canOpenProfile
+                  ? (event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      openMemberProfile(m);
+                    }
+                  : undefined
+              }
             >
               <div className="d-flex align-items-center gap-2">
                 {m.avatarUrl ? (
@@ -782,7 +916,11 @@ export default function ChatsPanel() {
                 </div>
               </div>
               {canRemove && (
-                <div className="chat-settings-member-actions">
+                <div
+                  className="chat-settings-member-actions"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
                   <button
                     type="button"
                     className="chat-settings-member-more"
@@ -899,27 +1037,41 @@ export default function ChatsPanel() {
         }
       >
         {isGroupChat && groupSettings && (
-          <div className="mb-2">
+          <div className="mb-1">
             <button
               type="button"
               className="btn btn-sm btn-outline-primary w-100 chat-settings-btn-row"
               onClick={() => setShowGroupNameModal(true)}
               disabled={isHangoutChat && !isGroupAdmin}
             >
-              <img src={darkEditIcon} alt="" aria-hidden="true" />
+              <span className="chat-settings-personal-icon-wrap" aria-hidden="true">
+                <img
+                  src={settingsEditIcon}
+                  alt=""
+                  aria-hidden="true"
+                  className="chat-settings-personal-icon"
+                />
+              </span>
               <span>Change Group Name</span>
             </button>
           </div>
         )}
         {isGroupChat && groupSettings && (
-          <div className="mb-2">
+          <div className="mb-1">
             <button
               type="button"
               className="btn btn-sm btn-outline-primary w-100 chat-settings-btn-row"
               onClick={() => groupPhotoInputRef.current?.click()}
               disabled={!isGroupAdmin}
             >
-              <img src={darkImageIcon} alt="" aria-hidden="true" />
+              <span className="chat-settings-personal-icon-wrap" aria-hidden="true">
+                <img
+                  src={settingsImageIcon}
+                  alt=""
+                  aria-hidden="true"
+                  className="chat-settings-personal-icon"
+                />
+              </span>
               <span>Change Group Photo</span>
             </button>
             <input
@@ -942,19 +1094,26 @@ export default function ChatsPanel() {
           </div>
         )}
         {selectedChat && (
-          <div className="mb-2">
+          <div className="mb-1">
             <button
               type="button"
               className="btn btn-sm btn-outline-primary w-100 chat-settings-btn-row"
               onClick={() => setShowNicknamesModal(true)}
             >
-              <img src={darkEditNicknameIcon} alt="" aria-hidden="true" />
+              <span className="chat-settings-personal-icon-wrap" aria-hidden="true">
+                <img
+                  src={settingsNicknameIcon}
+                  alt=""
+                  aria-hidden="true"
+                  className="chat-settings-personal-icon"
+                />
+              </span>
               <span>Edit nicknames</span>
             </button>
           </div>
         )}
         {selectedChat && (
-          <div className="mb-2">
+          <div className="mb-1">
             <button
               type="button"
               className="btn btn-sm btn-outline-primary w-100 chat-settings-btn-row"
@@ -1592,6 +1751,7 @@ export default function ChatsPanel() {
       const nextId = String(data.chatId);
       setSelectedChatId(nextId);
       navigate(`/app/chats/${nextId}`);
+      openChatView();
       setResults([]);
       setQuery("");
     } catch (e) {
@@ -1604,6 +1764,7 @@ export default function ChatsPanel() {
     if (!nextId) return;
     setSelectedChatId(nextId);
     navigate(`/app/chats/${nextId}`);
+    openChatView();
   }
 
   async function handleAcceptMessageRequest() {
@@ -1617,6 +1778,7 @@ export default function ChatsPanel() {
       if (nextChatId) {
         setSelectedChatId(nextChatId);
         navigate(`/app/chats/${nextChatId}`);
+        openChatView();
       }
     } catch (e) {
       setErr(e.message);
@@ -1671,6 +1833,7 @@ export default function ChatsPanel() {
       const nextId = String(data.chatId);
       setSelectedChatId(nextId);
       navigate(`/app/chats/${nextId}`);
+      openChatView();
       setGroupName("");
       setGroupMembers(new Set());
       setShowGroupForm(false);
@@ -1764,16 +1927,6 @@ export default function ChatsPanel() {
     setMoreOpenFor(null);
   }
 
-  // Helpers
-  const muteDurationOptions = [
-    { key: "5m", label: "5 mins", ms: 5 * 60 * 1000 },
-    { key: "15m", label: "15 mins", ms: 15 * 60 * 1000 },
-    { key: "30m", label: "30 mins", ms: 30 * 60 * 1000 },
-    { key: "1h", label: "1 hour", ms: 60 * 60 * 1000 },
-    { key: "4h", label: "4 hours", ms: 4 * 60 * 60 * 1000 },
-    { key: "forever", label: "Until turned off", ms: INDEFINITE_MUTE_MS },
-  ];
-
   function myReactionEmoji(m) {
     const mine = (m.reactions || []).find(
       (r) => String(r.userId) === String(user?.id)
@@ -1797,6 +1950,7 @@ export default function ChatsPanel() {
     const nextId = String(id);
     setSelectedChatId(nextId);
     navigate(`/app/chats/${nextId}`);
+    openChatView();
     const chat = chats.find((c) => String(c._id) === nextId);
     if (chat) {
       markChatRead(
@@ -2812,7 +2966,7 @@ export default function ChatsPanel() {
   // Render
   return (
     <div className="container-fluid chats-panel-layout">
-      <div className="row g-3 chats-panel-row">
+      <div className={`row g-3 chats-panel-row ${rowLayoutClass}`}>
       {err && (
         <div className="col-12">
           <div className="alert alert-danger">{err}</div>
@@ -2820,7 +2974,8 @@ export default function ChatsPanel() {
       )}
 
       {/* Left: chat list + search */}
-      <div className="col-12 col-lg-3 chats-panel-col">
+      {showSidebarColumn && (
+      <div className="col-12 col-lg-3 chats-panel-col chats-panel-sidebar-col">
         <ChatsSidebar
           userId={user?.id}
           query={query}
@@ -2846,16 +3001,18 @@ export default function ChatsPanel() {
           pinnedIcon={pinnedIcon}
           moreIcon={moreIcon}
           onTogglePin={togglePin}
-          muteOptions={muteDurationOptions}
+          muteOptions={MUTE_DURATION_OPTIONS}
           onSetMuteDuration={(chat, ms) => setChatMute(chat._id, ms)}
           onClearMute={(chat) => setChatMute(chat._id, null)}
           onDeleteChat={handleDeleteChat}
           formatTime={formatRelativeTime}
         />
       </div>
+      )}
 
       {/* Right: chat room */}
-      <div className="col-12 col-lg-6 chats-panel-col">
+      {showChatRoomColumn && (
+      <div className={`col-12 ${chatRoomColClass} chats-panel-col chats-panel-main-col`}>
         <ChatRoom
           selectedChatId={selectedChatId}
           onStickToBottomChange={setIsAtBottom}
@@ -2872,6 +3029,8 @@ export default function ChatsPanel() {
               }
               isOnline={isDirectChat ? directPeerOnline : false}
               isMuted={isMuted}
+              showBackButton={isSingleColumn && Boolean(selectedChatId)}
+              onBack={handleBackToSidebar}
               showCallButton={
                 Boolean(selectedChatId) &&
                 !isIncomingRequestThread &&
@@ -2880,6 +3039,10 @@ export default function ChatsPanel() {
               }
               disableCallButton={isInCall}
               onCall={handleStartCall}
+              showSettingsToggle={Boolean(selectedChatId)}
+              isSettingsVisible={showChatSettingsPanel}
+              onToggleSettings={toggleSettingsView}
+              moreIcon={moreIcon}
               groupCallBanner={
                 GROUP_CALLS_ENABLED && isGroupChat && selectedOngoingGroupCall?.callId ? (
                   <GroupCallHeaderBanner
@@ -3049,10 +3212,25 @@ export default function ChatsPanel() {
           }
         />
       </div>
+      )}
 
-      <div className="col-12 col-lg-3 chats-panel-col">
+      {showSettingsColumn && (
+      <div className="col-12 col-lg-3 chats-panel-col chats-panel-settings-col">
         <div className="border rounded p-3 h-100 chat-settings-panel">
-          <div className="fw-bold mb-2">Chat settings</div>
+          <div className="chat-settings-title-row">
+            <div className="fw-bold mb-0">Chat settings</div>
+            {isCompactTwoColumn && Boolean(selectedChatId) && (
+              <button
+                type="button"
+                className="chat-header-settings-btn chat-settings-toggle-btn"
+                onClick={closeSettingsView}
+                aria-label="Back to chat"
+                title="Back to chat"
+              >
+                <img src={moreIcon} alt="" aria-hidden="true" />
+              </button>
+            )}
+          </div>
           {!selectedChatId && (
             <div className="text-muted small">
               Select a chat to manage members and settings.
@@ -3185,6 +3363,7 @@ export default function ChatsPanel() {
       )}
     </div>
   </div>
+      )}
   </div>
     </div>
   );

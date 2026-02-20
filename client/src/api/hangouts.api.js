@@ -1,4 +1,5 @@
-const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_BASE, authFetch } from "./http";
+const API = API_BASE;
 
 async function parseJsonSafe(response) {
   const text = await response.text();
@@ -12,7 +13,7 @@ async function parseJsonSafe(response) {
 
 export const hangoutsApi = {
   async mine(accessToken) {
-    const r = await fetch(`${API}/hangouts/mine`, {
+    const r = await authFetch(`${API}/hangouts/mine`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
@@ -26,7 +27,7 @@ export const hangoutsApi = {
     url.searchParams.set("lat", lat);
     if (radius) url.searchParams.set("radius", radius);
 
-    const r = await fetch(url, {
+    const r = await authFetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
@@ -36,7 +37,7 @@ export const hangoutsApi = {
   },
 
   async create(accessToken, body) {
-    const r = await fetch(`${API}/hangouts`, {
+    const r = await authFetch(`${API}/hangouts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -51,7 +52,7 @@ export const hangoutsApi = {
   },
 
   async get(accessToken, hangoutId) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
@@ -61,7 +62,7 @@ export const hangoutsApi = {
   },
 
   async join(accessToken, hangoutId) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}/join`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}/join`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -72,7 +73,7 @@ export const hangoutsApi = {
   },
 
   async acceptJoinRequest(accessToken, hangoutId, userId) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}/join-requests/${userId}/accept`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}/join-requests/${userId}/accept`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -83,7 +84,7 @@ export const hangoutsApi = {
   },
 
   async declineJoinRequest(accessToken, hangoutId, userId) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}/join-requests/${userId}/decline`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}/join-requests/${userId}/decline`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -94,7 +95,7 @@ export const hangoutsApi = {
   },
 
   async leave(accessToken, hangoutId) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}/leave`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}/leave`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -105,7 +106,7 @@ export const hangoutsApi = {
   },
 
   async removeAttendee(accessToken, hangoutId, userId) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}/remove-attendee`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}/remove-attendee`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -120,7 +121,7 @@ export const hangoutsApi = {
   },
 
   async remove(accessToken, hangoutId) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -131,7 +132,7 @@ export const hangoutsApi = {
   },
 
   async update(accessToken, hangoutId, body) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -146,7 +147,7 @@ export const hangoutsApi = {
   },
 
   async shareLocation(accessToken, hangoutId, { lng, lat }) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}/share-location`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}/share-location`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -161,7 +162,7 @@ export const hangoutsApi = {
   },
 
   async stopSharing(accessToken, hangoutId) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}/share-location/stop`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}/share-location/stop`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -172,7 +173,7 @@ export const hangoutsApi = {
   },
 
   async updateShareNote(accessToken, hangoutId, note) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}/share-location/note`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}/share-location/note`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -187,7 +188,7 @@ export const hangoutsApi = {
   },
 
   async updateAttendeeStatus(accessToken, hangoutId, status) {
-    const r = await fetch(`${API}/hangouts/${hangoutId}/attendees/me/status`, {
+    const r = await authFetch(`${API}/hangouts/${hangoutId}/attendees/me/status`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",

@@ -2,9 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../store/AuthContext";
 import { usersApi } from "../api/users.api";
+import { API_BASE } from "../api/http";
 import "./Settings.css";
-
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Settings() {
   const { user, accessToken, setUser } = useAuth();
@@ -246,7 +245,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="container py-4" style={{ maxWidth: 720 }}>
+    <div className="container py-4 settings-page" style={{ maxWidth: 720 }}>
       <div className="d-flex align-items-center justify-content-between mb-3">
         <h3 className="fw-bold m-0">Settings</h3>
         <button

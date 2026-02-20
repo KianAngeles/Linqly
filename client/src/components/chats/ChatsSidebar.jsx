@@ -161,6 +161,8 @@ export default function ChatsSidebar({
           : formatPreviewText(rawLast);
       const previewShort =
         previewText.length > 18 ? `${previewText.slice(0, 18)}...` : previewText;
+      const rawTitle = String(c.displayName || c.type || "");
+      const titleShort = rawTitle.length > 21 ? `${rawTitle.slice(0, 21)}...` : rawTitle;
       const lastMessageAt = c.lastMessageAt ? new Date(c.lastMessageAt).getTime() : 0;
       const lastReadAt = c.lastReadAt ? new Date(c.lastReadAt).getTime() : 0;
       const lastSenderId = c.lastMessageSenderId ? String(c.lastMessageSenderId) : "";
@@ -175,7 +177,7 @@ export default function ChatsSidebar({
         >
           <button
             type="button"
-            className="btn btn-link text-start p-0 flex-grow-1"
+            className="chat-row-main-btn flex-grow-1"
             onClick={() => onSelectChat(String(c._id))}
             style={{ textDecoration: "none", color: "inherit" }}
           >
@@ -198,7 +200,7 @@ export default function ChatsSidebar({
               </div>
               <div>
                 <div className="chat-list-title d-flex align-items-center gap-2">
-                  <span>{c.displayName || c.type}</span>
+                  <span>{titleShort}</span>
                   {isPendingOutgoing ? (
                     <img src={requestIcon} alt="Pending request" className="chat-request-icon" />
                   ) : null}
@@ -256,6 +258,21 @@ export default function ChatsSidebar({
             <ul className="dropdown-menu dropdown-menu-end" data-bs-auto-close="outside">
               {String(muteOpenFor) === String(c._id) ? (
                 <>
+                  <li>
+                    <button
+                      className="dropdown-item chat-sidebar-mute-back"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setMuteOpenFor(null);
+                      }}
+                    >
+                      Back
+                    </button>
+                  </li>
+                  <li>
+                    <hr className="dropdown-divider my-1" />
+                  </li>
                   {muteOptions.map((opt) => (
                     <li key={opt.key}>
                       <button

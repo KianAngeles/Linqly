@@ -11,15 +11,16 @@ const router = express.Router();
 const GROUP_CALLS_ENABLED =
   String(process.env.GROUP_CALLS_ENABLED || "").toLowerCase() === "true";
 
-async function getFriendIds(userId) {
+async function getAcceptedFriendships(userId) {
   const docs = await Friendship.find({
     status: "accepted",
     $or: [{ requesterId: userId }, { receiverId: userId }],
-  }).select("requesterId receiverId");
+  }).select("requesterId receiverId createdAt updatedAt");
 
-  return docs.map((d) =>
-    String(d.requesterId) === String(userId) ? d.receiverId : d.requesterId
-  );
+  return docs.map((d) => ({
+    userId: String(d.requesterId) === String(userId) ? d.receiverId : d.requesterId,
+    acceptedAt: d.updatedAt || d.createdAt,
+  }));
 }
 
 function toActor(user) {
@@ -37,7 +38,7 @@ router.get("/", authRequired, async (req, res) => {
   const me = req.user.userId;
 
   const [
-    friendIds,
+    acceptedFriendships,
     incomingRequests,
     acceptedOutgoing,
     myHangouts,
@@ -51,7 +52,7 @@ router.get("/", authRequired, async (req, res) => {
     notificationState,
   ] =
     await Promise.all([
-      getFriendIds(me),
+      getAcceptedFriendships(me),
       Friendship.find({ receiverId: me, status: "pending" })
         .sort({ updatedAt: -1 })
         .limit(30)
@@ -126,11 +127,21 @@ router.get("/", authRequired, async (req, res) => {
     ]);
 
   let friendCreatedHangouts = [];
-  if (friendIds.length > 0) {
-    friendCreatedHangouts = await Hangout.find({ creatorId: { $in: friendIds } })
+  if (acceptedFriendships.length > 0) {
+    const friendHangoutFilters = acceptedFriendships
+      .map(({ userId, acceptedAt }) => {
+        const acceptedAtDate = new Date(acceptedAt || 0);
+        if (!Number.isFinite(acceptedAtDate.getTime())) return null;
+        return { creatorId: userId, createdAt: { $gte: acceptedAtDate } };
+      })
+      .filter(Boolean);
+
+    if (friendHangoutFilters.length > 0) {
+      friendCreatedHangouts = await Hangout.find({ $or: friendHangoutFilters })
       .sort({ createdAt: -1 })
       .limit(30)
       .populate("creatorId", "username displayName avatarUrl");
+    }
   }
 
   const notifications = [];

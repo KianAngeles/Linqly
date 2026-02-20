@@ -1,4 +1,4 @@
-import { apiFetch, API_BASE } from "./http";
+import { apiFetch, API_BASE, authFetch } from "./http";
 
 export const usersApi = {
   checkUsername: (username) =>
@@ -36,7 +36,7 @@ export const usersApi = {
     const form = new FormData();
     form.append("avatar", file);
 
-    const r = await fetch(`${API_BASE}/users/me/avatar`, {
+    const r = await authFetch(`${API_BASE}/users/me/avatar`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -51,3 +51,4 @@ export const usersApi = {
     return data;
   },
 };
+

@@ -59,7 +59,6 @@ export default function useChatsData({
 
   const deleteChat = useCallback(
     async (c) => {
-      if (!confirm("Delete this chat for you?")) return;
       await chatsApi.deleteForMe(accessToken, c._id);
       await loadChats();
       let clearedSelected = false;

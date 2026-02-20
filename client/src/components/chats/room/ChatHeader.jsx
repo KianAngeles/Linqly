@@ -8,9 +8,15 @@ export default function ChatHeader({
   avatarUrl,
   isOnline,
   isMuted,
+  showBackButton = false,
+  onBack,
   showCallButton = false,
   disableCallButton = false,
   onCall,
+  showSettingsToggle = false,
+  isSettingsVisible = true,
+  onToggleSettings,
+  moreIcon,
   groupCallBanner = null,
 }) {
   const lastCallRef = useRef(0);
@@ -28,6 +34,17 @@ export default function ChatHeader({
     <div className="chat-header-wrap">
       <div className="d-flex justify-content-between align-items-center mb-2 chat-header-row">
         <div className="fw-bold d-flex align-items-center gap-2">
+          {showBackButton && (
+            <button
+              type="button"
+              className="chat-header-back-btn"
+              onClick={onBack}
+              aria-label="Back to chats"
+              title="Back to chats"
+            >
+              <span aria-hidden="true">&lt;</span>
+            </button>
+          )}
           <div className="chat-header-avatar-wrap">
             {avatarUrl ? (
               <img src={avatarUrl} alt={`${title} avatar`} className="chat-header-avatar" />
@@ -66,6 +83,23 @@ export default function ChatHeader({
             </button>
           )}
           <div className="text-muted small">You: {username}</div>
+          {showSettingsToggle && (
+            <button
+              type="button"
+              className="chat-header-settings-btn"
+              onClick={onToggleSettings}
+              aria-label={
+                isSettingsVisible ? "Hide chat settings" : "Show chat settings"
+              }
+              title={isSettingsVisible ? "Hide chat settings" : "Show chat settings"}
+            >
+              {moreIcon ? (
+                <img src={moreIcon} alt="" aria-hidden="true" />
+              ) : (
+                <span aria-hidden="true">...</span>
+              )}
+            </button>
+          )}
         </div>
       </div>
       {groupCallBanner}

@@ -13,22 +13,22 @@
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  border: none;
-  background: #fff;
-  color: #111827;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   font-size: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.2);
+  box-shadow: var(--shadow-md);
   pointer-events: auto;
   transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
 }
 
 .uc-fab:hover {
   transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.26);
+  box-shadow: var(--shadow-lg);
   filter: saturate(1.1);
 }
 
@@ -36,6 +36,10 @@
   width: 20px;
   height: 20px;
   object-fit: contain;
+}
+
+html[data-theme="dark"] .uc-fab-icon {
+  filter: invert(1) grayscale(1);
 }
 
 .uc-fab-badge {
@@ -56,10 +60,10 @@
   bottom: 84px;
   width: 280px;
   max-height: 70vh;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.18);
+  box-shadow: var(--shadow-md);
   padding: 10px;
   pointer-events: auto;
   overflow: hidden;
@@ -98,7 +102,7 @@
 .uc-panel-section-title {
   font-size: 12px;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--text-muted);
   margin: 6px 0;
 }
 
@@ -115,13 +119,47 @@
 }
 
 .uc-list-item:hover {
-  background: #f3f4f6;
+  background: var(--bg-muted);
   border-radius: 8px;
 }
 
 .uc-list-title {
   font-size: 14px;
   flex: 1;
+  color: var(--text);
+}
+
+html[data-theme="dark"] .uc-panel .uc-list-title {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .uc-mini-title {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .uc-panel .input,
+html[data-theme="dark"] .uc-panel input,
+html[data-theme="dark"] .uc-panel textarea,
+html[data-theme="dark"] .uc-panel select {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .uc-panel .input::placeholder,
+html[data-theme="dark"] .uc-panel input::placeholder,
+html[data-theme="dark"] .uc-panel textarea::placeholder {
+  color: var(--text-subtle);
+}
+
+html[data-theme="dark"] .uc-panel .text-muted {
+  color: var(--text) !important;
+  opacity: 1 !important;
+}
+
+html[data-theme="dark"] .uc-panel .small.text-muted {
+  color: var(--text) !important;
+  opacity: 1 !important;
 }
 
 .uc-list-avatar {
@@ -153,15 +191,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #e0e7ff;
-  color: #4338ca;
+  background: var(--bg-muted);
+  color: var(--text);
   font-weight: 700;
   font-size: 12px;
 }
 
 .uc-empty {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-subtle);
   padding: 6px 0;
 }
 
@@ -297,6 +335,10 @@
   row-gap: 0 !important;
 }
 
+.uc-mini .msg-system-text {
+  font-size: 0.72rem;
+}
+
 .uc-mini .msg-icon-btn img {
   width: 16px !important;
   height: 16px !important;
@@ -420,6 +462,12 @@
 .uc-mini-call-btn img {
   width: 16px;
   height: 16px;
+  margin-top: 7px;
+  margin-right: 13px;
+}
+
+html[data-theme="dark"] .uc-mini-call-btn img {
+  filter: brightness(0) invert(1);
 }
 
 .uc-mini-call-btn:disabled {
@@ -486,6 +534,41 @@
   position: relative;
   overflow: visible;
   z-index: 2;
+}
+
+html[data-theme="dark"] .uc-mini {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: var(--shadow-md);
+}
+
+html[data-theme="dark"] .uc-mini-header {
+  background: var(--surface-2);
+  border-bottom-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .uc-mini-title {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .uc-mini-actions button {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .uc-mini-actions button:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .uc-mini-body {
+  background: var(--surface);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .uc-mini-input {
+  background: var(--surface);
+  border-top-color: var(--border);
 }
 
 .uc-mini .chat-input-field {
@@ -574,4 +657,11 @@
 .uc-mini.is-minimized .uc-mini-avatar {
   width: 52px;
   height: 52px;
+}
+
+@media (max-width: 1250px) {
+  .uc-fab {
+    display: none !important;
+    pointer-events: none !important;
+  }
 }

@@ -18,19 +18,59 @@ const rateLimit = require("express-rate-limit");
 const router = express.Router();
 
 const REFRESH_COOKIE_NAME = "refreshToken";
+const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+function resolveRefreshCookieOptions() {
+  const isProduction = process.env.NODE_ENV === "production";
+  const secureFromEnv = String(process.env.REFRESH_COOKIE_SECURE || "").trim().toLowerCase();
+  const sameSiteFromEnv = String(process.env.REFRESH_COOKIE_SAME_SITE || "")
+    .trim()
+    .toLowerCase();
+  const pathFromEnv = String(process.env.REFRESH_COOKIE_PATH || "").trim();
+
+  const secure =
+    secureFromEnv === "true"
+      ? true
+      : secureFromEnv === "false"
+        ? false
+        : isProduction;
+
+  let sameSite =
+    sameSiteFromEnv === "none" ||
+    sameSiteFromEnv === "lax" ||
+    sameSiteFromEnv === "strict"
+      ? sameSiteFromEnv
+      : secure
+        ? "none"
+        : "lax";
+
+  // Browsers reject SameSite=None unless Secure=true.
+  if (sameSite === "none" && !secure) {
+    sameSite = "lax";
+  }
+
+  return {
+    httpOnly: true,
+    secure,
+    sameSite,
+    path: pathFromEnv || "/",
+    maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+  };
+}
 
 function setRefreshCookie(res, token) {
-  res.cookie(REFRESH_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: false, // set true in production (https)
-    sameSite: "lax",
-    path: "/auth/refresh",
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-  });
+  const options = resolveRefreshCookieOptions();
+  res.cookie(REFRESH_COOKIE_NAME, token, options);
 }
 
 function clearRefreshCookie(res) {
-  res.clearCookie(REFRESH_COOKIE_NAME, { path: "/auth/refresh" });
+  const options = resolveRefreshCookieOptions();
+  res.clearCookie(REFRESH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: options.secure,
+    sameSite: options.sameSite,
+    path: options.path,
+  });
 }
 
 const forgotLimiter = rateLimit({

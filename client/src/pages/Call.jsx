@@ -5,6 +5,7 @@ import { socket } from "../socket";
 import CallLayout from "../components/calls/CallLayout";
 import GroupCallAdminMenu from "../components/calls/GroupCallAdminMenu";
 import { messagesApi } from "../api/messages.api";
+import { API_BASE } from "../api/http";
 import { GROUP_CALLS_ENABLED } from "../constants/featureFlags";
 
 const TURN_URLS = (import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || "")
@@ -138,7 +139,7 @@ export default function Call() {
   const missedLoggedRef = useRef(false);
   const completedLoggedRef = useRef(false);
 
-  const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  const apiBase = API_BASE;
   const displayName = user?.displayName || user?.username || "You";
   const localUserId = user?.id || user?._id || user?.userId || "";
   const peerName = storedMeta?.peerName || "Peer";

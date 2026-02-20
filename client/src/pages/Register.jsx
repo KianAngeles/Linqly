@@ -45,7 +45,6 @@ export default function Register() {
   const [err, setErr] = useState("");
 
   const genderMenuRef = useRef(null);
-
   const transition =
     location?.state?.fromAuth && location?.state?.direction === "left"
       ? "left"

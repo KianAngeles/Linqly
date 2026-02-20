@@ -13,18 +13,23 @@ import showIcon from "../assets/icons/map-icons/show.png";
 import hiddenIcon from "../assets/icons/map-icons/hidden.png";
 import removeAttendeeIcon from "../assets/icons/map-icons/remove.png";
 import "./HangoutsMap.css";
-import MapGate from "../components/hangouts/MapGate";
-import MapSearch from "../components/hangouts/MapSearch";
 import MapActions from "../components/hangouts/MapActions";
-import RadiusControls from "../components/hangouts/RadiusControls";
 import HangoutsLoadingEmpty from "../components/hangouts/HangoutsLoadingEmpty";
 import HangoutDetailCard from "../components/hangouts/HangoutDetailCard";
 import HangoutModal from "../components/hangouts/HangoutModal";
+import MapCanvas from "../components/hangouts/MapCanvas";
+import HangoutsPanel from "../components/hangouts/HangoutsPanel";
+import ControlsPanel from "../components/hangouts/ControlsPanel";
+import MapOverlayDrawer from "../components/hangouts/MapOverlayDrawer";
 
 const FALLBACK_CENTER = { lng: 120.9842, lat: 14.5995 };
 const DEFAULT_RADIUS_METERS = 8000;
 const MAP_STATE_KEY = "linqly.hangouts.mapState";
 const HANGOUT_PIN_OFFSET = [0, -5];
+const MAP_STYLE_LIGHT = "mapbox://styles/mapbox/streets-v12";
+const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11";
+const MAP_DESKTOP_BREAKPOINT = 1200;
+const MAP_MOBILE_BREAKPOINT = 768;
 const CLOSED_HANGOUT_STATUSES = new Set([
   "closed",
   "ended",
@@ -164,6 +169,7 @@ export default function HangoutsMap() {
   const nav = useNavigate();
   const { user, accessToken } = useAuth();
   const mapRef = useRef(null);
+  const currentMapStyleRef = useRef("");
   const mapContainerRef = useRef(null);
   const markersRef = useRef([]);
   const draftMarkerRef = useRef(null);
@@ -240,8 +246,42 @@ export default function HangoutsMap() {
   const [removeAttendeeTarget, setRemoveAttendeeTarget] = useState(null);
   const [showHangoutClosedModal, setShowHangoutClosedModal] = useState(false);
   const joinedHangoutRoomRef = useRef(null);
+  const [mapTheme, setMapTheme] = useState(() =>
+    document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light"
+  );
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window === "undefined" ? MAP_DESKTOP_BREAKPOINT : window.innerWidth
+  );
+  const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
+  const [mobileSheetState, setMobileSheetState] = useState("collapsed");
+  const leftDrawerRef = useRef(null);
+  const rightDrawerRef = useRef(null);
+  const mobileSheetRef = useRef(null);
+  const mobileControlsSheetRef = useRef(null);
 
   const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN || "", []);
+  const mapStyleUrl = mapTheme === "dark" ? MAP_STYLE_DARK : MAP_STYLE_LIGHT;
+  const isDesktopLayout = viewportWidth >= MAP_DESKTOP_BREAKPOINT;
+  const isMobileLayout = viewportWidth < MAP_MOBILE_BREAKPOINT;
+  const isTabletLayout = !isDesktopLayout && !isMobileLayout;
+  const pageLayoutClass = isDesktopLayout
+    ? "is-desktop"
+    : isTabletLayout
+      ? "is-tablet"
+      : "is-mobile";
+
+  useEffect(() => {
+    if (typeof MutationObserver === "undefined") return undefined;
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      const nextTheme = root.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      setMapTheme((prev) => (prev === nextTheme ? prev : nextTheme));
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const lang = navigator.language || "";
@@ -250,6 +290,30 @@ export default function HangoutsMap() {
       setSearchCountry(region.toLowerCase());
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    if (isDesktopLayout) {
+      setLeftDrawerOpen(false);
+      setRightDrawerOpen(false);
+      setMobileControlsOpen(false);
+      setMobileSheetState("collapsed");
+      return;
+    }
+    if (isTabletLayout) {
+      setMobileControlsOpen(false);
+      setMobileSheetState("collapsed");
+      return;
+    }
+    setLeftDrawerOpen(false);
+    setRightDrawerOpen(false);
+  }, [isDesktopLayout, isTabletLayout]);
 
   useEffect(() => {
     if (hangoutClosedParam === "1") {
@@ -339,13 +403,14 @@ export default function HangoutsMap() {
 
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
-      style: "mapbox://styles/mapbox/streets-v12",
+      style: mapStyleUrl,
       center: [center.lng, center.lat],
       zoom,
     });
+    currentMapStyleRef.current = mapStyleUrl;
 
     map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
-    map.on("load", () => {
+    map.on("style.load", () => {
       if (!map.getSource("hangout-radius")) {
         map.addSource("hangout-radius", {
           type: "geojson",
@@ -407,7 +472,16 @@ export default function HangoutsMap() {
       mapRef.current = null;
       map.remove();
     };
-  }, [center.lat, center.lng, mapboxToken, mapReady, radiusMeters, zoom, locationEnabled]);
+  }, [center.lat, center.lng, mapboxToken, mapReady, radiusMeters, zoom, locationEnabled, mapStyleUrl]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (currentMapStyleRef.current === mapStyleUrl) return;
+    setMapLoaded(false);
+    currentMapStyleRef.current = mapStyleUrl;
+    map.setStyle(mapStyleUrl);
+  }, [mapStyleUrl]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -418,6 +492,55 @@ export default function HangoutsMap() {
     if (!mapRef.current) return;
     mapRef.current.setZoom(zoom);
   }, [zoom]);
+
+  const onMapLayoutChange = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const runResize = () => {
+      if (typeof map.resize === "function") {
+        map.resize();
+        return;
+      }
+      if (typeof map.invalidateSize === "function") {
+        map.invalidateSize();
+      }
+    };
+    requestAnimationFrame(() => {
+      runResize();
+      setTimeout(runResize, 0);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const timer = setTimeout(onMapLayoutChange, 0);
+    return () => clearTimeout(timer);
+  }, [
+    mapReady,
+    onMapLayoutChange,
+    isDesktopLayout,
+    isTabletLayout,
+    isMobileLayout,
+    leftDrawerOpen,
+    rightDrawerOpen,
+    mobileControlsOpen,
+    mobileSheetState,
+  ]);
+
+  useEffect(() => {
+    const nodes = [
+      leftDrawerRef.current,
+      rightDrawerRef.current,
+      mobileSheetRef.current,
+      mobileControlsSheetRef.current,
+    ].filter(Boolean);
+    if (nodes.length === 0) return undefined;
+    const onTransitionEnd = () => onMapLayoutChange();
+    nodes.forEach((node) => node.addEventListener("transitionend", onTransitionEnd));
+    return () => {
+      nodes.forEach((node) => node.removeEventListener("transitionend", onTransitionEnd));
+    };
+  }, [onMapLayoutChange, isTabletLayout, isMobileLayout, leftDrawerOpen, rightDrawerOpen, mobileControlsOpen]);
 
   const requestLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -1593,6 +1716,48 @@ export default function HangoutsMap() {
     }
   }, [center, zoom, radiusMeters, mapReady]);
 
+  useEffect(() => {
+    const hasOverlay =
+      (isTabletLayout && (leftDrawerOpen || rightDrawerOpen)) ||
+      (isMobileLayout && mobileControlsOpen);
+    if (!hasOverlay) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      if (isTabletLayout) {
+        setLeftDrawerOpen(false);
+        setRightDrawerOpen(false);
+      }
+      if (isMobileLayout) {
+        setMobileControlsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isTabletLayout, isMobileLayout, leftDrawerOpen, rightDrawerOpen, mobileControlsOpen]);
+
+  const openListDrawer = useCallback(() => {
+    setLeftDrawerOpen(true);
+    setRightDrawerOpen(false);
+  }, []);
+
+  const openControlsDrawer = useCallback(() => {
+    setRightDrawerOpen(true);
+    setLeftDrawerOpen(false);
+  }, []);
+
+  const closeTabletDrawers = useCallback(() => {
+    setLeftDrawerOpen(false);
+    setRightDrawerOpen(false);
+  }, []);
+
+  const cycleMobileSheetState = useCallback(() => {
+    setMobileSheetState((prev) => {
+      if (prev === "collapsed") return "mid";
+      if (prev === "mid") return "full";
+      return "mid";
+    });
+  }, []);
+
   function handleRecenter() {
     if (!userLocation) return;
     setCenter(userLocation);
@@ -1739,8 +1904,28 @@ export default function HangoutsMap() {
     );
   }
 
+  const canRenderPanels = mapReady && locationEnabled !== false;
+  const withinListContent = renderHangoutList(
+    feed,
+    "No hangouts within this radius yet.",
+    { splitTimeRow: true }
+  );
+  const joinedListContent = renderHangoutList(
+    showMyHangouts ? myHangouts : joinedHangouts,
+    showMyHangouts
+      ? "You have not created any hangouts yet."
+      : "You have not joined any hangouts yet."
+  );
+  const mobileNearbySummary = isLoading
+    ? "Loading hangouts..."
+    : `${feed.length} hangouts nearby`;
+
   return (
-    <div className="hangouts-map-page">
+    <div
+      className={`hangouts-map-page ${pageLayoutClass} ${
+        isMobileLayout ? `mobile-sheet-${mobileSheetState}` : ""
+      }`.trim()}
+    >
       {!mapboxToken && (
         <div className="alert alert-warning">
           Missing Mapbox token. Set VITE_MAPBOX_TOKEN to load the map.
@@ -1749,140 +1934,17 @@ export default function HangoutsMap() {
 
       <div className="hangouts-map-layout">
         <div className="hangouts-map-center">
-          <div className={`hangouts-map ${locationEnabled === false ? "is-disabled" : ""}`}>
-            {!mapReady && <MapGate onLoadMap={handleShowMap} />}
-
-            <div ref={mapContainerRef} className="hangouts-map-canvas" />
-
-            {mapReady && locating && (
-              <div className="map-locating map-overlay">
-                <span
-                  className="spinner-border spinner-border-sm"
-                  role="status"
-                  aria-hidden="true"
-                />
-                Locating...
-              </div>
-            )}
-
-            {mapReady && locationEnabled === false && (
-              <div className="map-location-disabled map-overlay">
-                <div className="map-location-disabled-title">
-                  We can’t access your location. Please enable location services to view the map.
-                </div>
-                <div className="map-location-disabled-subtitle">
-                  Enable location in your browser settings to continue.
-                </div>
-              </div>
-            )}
-
-            {mapReady && locationEnabled !== false && (
-              <div className="hangouts-map-toolbar map-overlay">
-                <RadiusControls
-                  radiusMeters={radiusMeters}
-                  onChangeRadius={(e) => setRadiusMeters(Number(e.target.value))}
-                />
-                <div className="hangouts-location-toggle">
-                  <div className="fw-semibold small">Friends only</div>
-                  <div className="form-check form-switch m-0">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="shareLocationAllToggle"
-                    checked={shareAllEnabled}
-                    onChange={handleToggleShareAll}
-                    disabled={shareAllLoading}
-                  />
-                    <label
-                      className="form-check-label small"
-                      htmlFor="shareLocationAllToggle"
-                    >
-                      Share with friends
-                    </label>
-                  </div>
-                  <div className="text-muted small">Friends can see you on the map</div>
-                  <div className="friends-only-note">
-                    <label className="form-label small mb-1" htmlFor="shareAllNote">
-                      Note
-                    </label>
-                    <input
-                      id="shareAllNote"
-                      className="form-control form-control-sm"
-                      maxLength={16}
-                      placeholder="On the way"
-                      value={shareAllNote}
-                      onChange={(e) => setShareAllNote(e.target.value)}
-                    />
-                  </div>
-                  {shareAllLoading && (
-                    <div className="text-muted small d-flex align-items-center gap-2">
-                      <span
-                        className="spinner-border spinner-border-sm"
-                        role="status"
-                        aria-hidden="true"
-                      />
-                      Updating location...
-                    </div>
-                  )}
-                  {shareAllError && (
-                    <div className="text-danger small">{shareAllError}</div>
-                  )}
-                </div>
-                <div className="map-joined-panel">
-                  <div className="map-joined-header">
-                    <div>
-                      <div className="fw-semibold small">
-                        {showMyHangouts ? "Created hangouts" : "Joined hangouts"}
-                      </div>
-                      <div className="text-muted small">
-                        {showMyHangouts ? myHangouts.length : joinedHangouts.length} in
-                        this area
-                      </div>
-                    </div>
-                    <div className="d-flex gap-2">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={() => setShowMyHangouts((prev) => !prev)}
-                      >
-                        {showMyHangouts ? "Joined" : "Created"}
-                      </button>
-                      <button
-                        type="button"
-                        className="map-toggle-icon-btn"
-                        onClick={() => setShowJoinedList((prev) => !prev)}
-                        aria-label={showJoinedList ? "Hide list" : "Show list"}
-                        title={showJoinedList ? "Hide" : "Show"}
-                      >
-                        <img
-                          src={showJoinedList ? hiddenIcon : showIcon}
-                          alt=""
-                        />
-                      </button>
-                    </div>
-                  </div>
-                  {showJoinedList && (
-                    <div className="map-joined-body">
-                      {renderHangoutList(
-                        showMyHangouts ? myHangouts : joinedHangouts,
-                        showMyHangouts
-                          ? "You have not created any hangouts yet."
-                          : "You have not joined any hangouts yet."
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="map-actions-right">
-                  <MapActions onRecenter={handleRecenter} disabled={!userLocation} />
-                </div>
-              </div>
-            )}
-
-            {mapReady && locationEnabled !== false && (
-              <div className="map-left-stack map-overlay">
-                <div className="map-left-primary">
-                  <div className="map-hint">Click on the map to drop a new hangout pin.</div>
-                  <MapSearch
+          <MapCanvas
+            mapReady={mapReady}
+            locating={locating}
+            locationEnabled={locationEnabled}
+            mapContainerRef={mapContainerRef}
+            onLoadMap={handleShowMap}
+          >
+            {canRenderPanels && isDesktopLayout && (
+              <>
+                <div className="map-left-stack map-overlay">
+                  <HangoutsPanel
                     searchRef={searchRef}
                     searchQuery={searchQuery}
                     onChangeSearchQuery={(e) => setSearchQuery(e.target.value)}
@@ -1890,44 +1952,125 @@ export default function HangoutsMap() {
                     searchError={searchError}
                     searchResults={searchResults}
                     onSelectResult={handleSelectResult}
+                    radiusMeters={radiusMeters}
+                    showWithinList={showWithinList}
+                    onToggleWithinList={() => setShowWithinList((prev) => !prev)}
+                    showIcon={showIcon}
+                    hiddenIcon={hiddenIcon}
+                    listContent={withinListContent}
+                    className="map-left-primary map-panel-desktop"
                   />
-                  <div className="map-within-panel">
-                    <div className="map-within-header">
-                      <div className="map-within-meta">
-                        <div className="fw-semibold small">Within radius</div>
-                        <div className="text-muted small">
-                          {Math.round(radiusMeters / 1000)} km around you
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="map-toggle-icon-btn"
-                        onClick={() => setShowWithinList((prev) => !prev)}
-                        aria-label={showWithinList ? "Hide list" : "Show list"}
-                        title={showWithinList ? "Hide" : "Show"}
-                      >
-                        <img src={showWithinList ? hiddenIcon : showIcon} alt="" />
-                      </button>
-                    </div>
-                    {showWithinList && (
-                      <div className="map-within-body">
-                        {renderHangoutList(
-                          feed,
-                          "No hangouts within this radius yet.",
-                          { splitTimeRow: true }
-                        )}
-                      </div>
-                    )}
-                  </div>
                 </div>
+
+                <div className="hangouts-map-toolbar map-overlay">
+                  <ControlsPanel
+                    className="map-controls-desktop"
+                    radiusMeters={radiusMeters}
+                    onChangeRadius={(e) => setRadiusMeters(Number(e.target.value))}
+                    shareAllEnabled={shareAllEnabled}
+                    onToggleShareAll={handleToggleShareAll}
+                    shareAllLoading={shareAllLoading}
+                    shareAllNote={shareAllNote}
+                    onShareAllNoteChange={(e) => setShareAllNote(e.target.value)}
+                    shareAllError={shareAllError}
+                    showMyHangouts={showMyHangouts}
+                    onToggleMyHangouts={() => setShowMyHangouts((prev) => !prev)}
+                    showJoinedList={showJoinedList}
+                    onToggleJoinedList={() => setShowJoinedList((prev) => !prev)}
+                    joinedHangoutsCount={joinedHangouts.length}
+                    myHangoutsCount={myHangouts.length}
+                    showIcon={showIcon}
+                    hiddenIcon={hiddenIcon}
+                    joinedListContent={joinedListContent}
+                    footer={
+                      <div className="map-actions-right">
+                        <MapActions onRecenter={handleRecenter} disabled={!userLocation} />
+                      </div>
+                    }
+                  />
+                </div>
+              </>
+            )}
+
+            {canRenderPanels && isTabletLayout && (
+              <div className="map-floating-actions map-overlay" role="group" aria-label="Map actions">
+                <button
+                  type="button"
+                  className="map-fab-btn"
+                  onClick={openListDrawer}
+                  aria-expanded={leftDrawerOpen}
+                  aria-controls="map-left-drawer"
+                >
+                  List
+                </button>
+                <button
+                  type="button"
+                  className="map-fab-btn"
+                  onClick={openControlsDrawer}
+                  aria-expanded={rightDrawerOpen}
+                  aria-controls="map-right-drawer"
+                >
+                  Controls
+                </button>
+                <MapActions onRecenter={handleRecenter} disabled={!userLocation} />
               </div>
             )}
 
-            <HangoutsLoadingEmpty
-              isLoading={isLoading}
-              mapReady={mapReady}
-              feedLength={feed.length}
-            />
+            {canRenderPanels && isMobileLayout && (
+              <div className="map-floating-actions map-overlay" role="group" aria-label="Map actions">
+                <button
+                  type="button"
+                  className="map-fab-btn"
+                  onClick={() => setMobileControlsOpen(true)}
+                  aria-expanded={mobileControlsOpen}
+                  aria-controls="map-mobile-controls-sheet"
+                >
+                  Controls
+                </button>
+                <MapActions onRecenter={handleRecenter} disabled={!userLocation} />
+              </div>
+            )}
+
+            {canRenderPanels && isMobileLayout && (
+              <section
+                ref={mobileSheetRef}
+                className={`map-mobile-sheet is-${mobileSheetState} map-overlay`}
+                aria-label="Hangouts list"
+              >
+                <button
+                  type="button"
+                  className="map-mobile-sheet-handle"
+                  onClick={cycleMobileSheetState}
+                  aria-label="Expand hangouts list"
+                >
+                  <span className="map-mobile-sheet-grip" aria-hidden="true" />
+                  <span className="map-mobile-sheet-title">{mobileNearbySummary}</span>
+                </button>
+                {mobileSheetState !== "collapsed" && (
+                  <div className="map-mobile-sheet-body">
+                    <HangoutsPanel
+                      searchRef={searchRef}
+                      searchQuery={searchQuery}
+                      onChangeSearchQuery={(e) => setSearchQuery(e.target.value)}
+                      onSubmitSearch={handleSearch}
+                      searchError={searchError}
+                      searchResults={searchResults}
+                      onSelectResult={handleSelectResult}
+                      radiusMeters={radiusMeters}
+                      showWithinList={showWithinList}
+                      onToggleWithinList={() => setShowWithinList((prev) => !prev)}
+                      showIcon={showIcon}
+                      hiddenIcon={hiddenIcon}
+                      listContent={withinListContent}
+                      showHint={false}
+                      className="map-panel-mobile"
+                    />
+                  </div>
+                )}
+              </section>
+            )}
+
+            <HangoutsLoadingEmpty isLoading={isLoading} mapReady={mapReady} feedLength={feed.length} />
 
             <aside
               className={`hangouts-detail-panel ${isDetailOpen ? "is-open" : ""}`}
@@ -1994,11 +2137,125 @@ export default function HangoutsMap() {
                 </div>
               )}
             </aside>
-
-          </div>
+          </MapCanvas>
         </div>
       </div>
 
+      {isTabletLayout && canRenderPanels && (
+        <>
+          <MapOverlayDrawer
+            id="map-left-drawer"
+            side="left"
+            open={leftDrawerOpen}
+            title="Hangouts"
+            onClose={closeTabletDrawers}
+            drawerRef={leftDrawerRef}
+          >
+            <div>
+              <HangoutsPanel
+                searchRef={searchRef}
+                searchQuery={searchQuery}
+                onChangeSearchQuery={(e) => setSearchQuery(e.target.value)}
+                onSubmitSearch={handleSearch}
+                searchError={searchError}
+                searchResults={searchResults}
+                onSelectResult={handleSelectResult}
+                radiusMeters={radiusMeters}
+                showWithinList={showWithinList}
+                onToggleWithinList={() => setShowWithinList((prev) => !prev)}
+                showIcon={showIcon}
+                hiddenIcon={hiddenIcon}
+                listContent={withinListContent}
+                showHint={false}
+                className="map-panel-drawer"
+              />
+            </div>
+          </MapOverlayDrawer>
+
+          <MapOverlayDrawer
+            id="map-right-drawer"
+            side="right"
+            open={rightDrawerOpen}
+            title="Controls"
+            onClose={closeTabletDrawers}
+            drawerRef={rightDrawerRef}
+          >
+            <div>
+              <ControlsPanel
+                radiusMeters={radiusMeters}
+                onChangeRadius={(e) => setRadiusMeters(Number(e.target.value))}
+                shareAllEnabled={shareAllEnabled}
+                onToggleShareAll={handleToggleShareAll}
+                shareAllLoading={shareAllLoading}
+                shareAllNote={shareAllNote}
+                onShareAllNoteChange={(e) => setShareAllNote(e.target.value)}
+                shareAllError={shareAllError}
+                showMyHangouts={showMyHangouts}
+                onToggleMyHangouts={() => setShowMyHangouts((prev) => !prev)}
+                showJoinedList={showJoinedList}
+                onToggleJoinedList={() => setShowJoinedList((prev) => !prev)}
+                joinedHangoutsCount={joinedHangouts.length}
+                myHangoutsCount={myHangouts.length}
+                showIcon={showIcon}
+                hiddenIcon={hiddenIcon}
+                joinedListContent={joinedListContent}
+              />
+            </div>
+          </MapOverlayDrawer>
+        </>
+      )}
+
+      {isMobileLayout && canRenderPanels && (
+        <>
+          <div
+            className={`map-controls-sheet-backdrop ${mobileControlsOpen ? "is-open" : ""}`}
+            onClick={() => setMobileControlsOpen(false)}
+            aria-hidden={!mobileControlsOpen}
+          />
+          <section
+            id="map-mobile-controls-sheet"
+            ref={mobileControlsSheetRef}
+            className={`map-controls-sheet ${mobileControlsOpen ? "is-open" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-hidden={!mobileControlsOpen}
+            aria-label="Map controls"
+          >
+            <div className="map-controls-sheet-header">
+              <div className="fw-semibold">Controls</div>
+              <button
+                type="button"
+                className="map-drawer-close"
+                onClick={() => setMobileControlsOpen(false)}
+                aria-label="Close controls"
+              >
+                x
+              </button>
+            </div>
+            <div className="map-controls-sheet-body">
+              <ControlsPanel
+                radiusMeters={radiusMeters}
+                onChangeRadius={(e) => setRadiusMeters(Number(e.target.value))}
+                shareAllEnabled={shareAllEnabled}
+                onToggleShareAll={handleToggleShareAll}
+                shareAllLoading={shareAllLoading}
+                shareAllNote={shareAllNote}
+                onShareAllNoteChange={(e) => setShareAllNote(e.target.value)}
+                shareAllError={shareAllError}
+                showMyHangouts={showMyHangouts}
+                onToggleMyHangouts={() => setShowMyHangouts((prev) => !prev)}
+                showJoinedList={showJoinedList}
+                onToggleJoinedList={() => setShowJoinedList((prev) => !prev)}
+                joinedHangoutsCount={joinedHangouts.length}
+                myHangoutsCount={myHangouts.length}
+                showIcon={showIcon}
+                hiddenIcon={hiddenIcon}
+                joinedListContent={joinedListContent}
+              />
+            </div>
+          </section>
+        </>
+      )}
       <HangoutModal
         show={showCreate}
         isEditing={isEditing}
@@ -2125,3 +2382,4 @@ export default function HangoutsMap() {
     </div>
   );
 }
+

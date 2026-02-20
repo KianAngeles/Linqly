@@ -1,5 +1,6 @@
 import { Link, matchPath, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../../store/AuthContext";
 import { useCall } from "../../store/CallContext";
 import { usersApi } from "../../api/users.api";
@@ -12,6 +13,8 @@ import {
 } from "../../hooks/useNotificationsDropdownData";
 import searchIcon from "../../assets/icons/friends-icons/search.png";
 import notificationBellIcon from "../../assets/icons/Header-icons/notification-bell.png";
+import sunIcon from "../../assets/icons/Header-icons/sun.png";
+import moonIcon from "../../assets/icons/Header-icons/moon.png";
 import moreIcon from "../../assets/icons/more.png";
 
 const pageTitles = [
@@ -27,6 +30,7 @@ const pageTitles = [
 
 const RECENT_USER_SEARCH_KEY = "linqly.header.recentUserSearches";
 const RECENT_USER_SEARCH_LIMIT = 4;
+const THEME_STORAGE_KEY = "linqly.theme";
 
 function normalizeSearchUser(raw) {
   if (!raw) return null;
@@ -43,6 +47,21 @@ function normalizeSearchUser(raw) {
   };
 }
 
+function loadRecentSearchesFromStorage() {
+  try {
+    const raw = localStorage.getItem(RECENT_USER_SEARCH_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((x) => normalizeSearchUser(x))
+      .filter(Boolean)
+      .slice(0, RECENT_USER_SEARCH_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
 export default function HeaderBar() {
   const { pathname } = useLocation();
   const nav = useNavigate();
@@ -50,11 +69,20 @@ export default function HeaderBar() {
   const { joinGroupCall } = useCall();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  const [recentSearches, setRecentSearches] = useState([]);
+  const [recentSearches, setRecentSearches] = useState(loadRecentSearchesFromStorage);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isDarkToggle, setIsDarkToggle] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const persisted = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (persisted === "dark") return true;
+    if (persisted === "light") return false;
+    return document.documentElement.getAttribute("data-theme") === "dark";
+  });
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [soundSilenceNotice, setSoundSilenceNotice] = useState("");
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const searchWrapRef = useRef(null);
   const notificationsWrapRef = useRef(null);
   const requestIdRef = useRef(0);
@@ -87,9 +115,16 @@ export default function HeaderBar() {
     return "Home";
   }, [pathname]);
 
-  async function handleLogout() {
-    await logout();
-    nav("/", { replace: true });
+  async function confirmLogout() {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      nav("/", { replace: true });
+    } finally {
+      setIsLoggingOut(false);
+      setIsLogoutConfirmOpen(false);
+    }
   }
 
   const addRecentSearch = (rawUser) => {
@@ -124,20 +159,6 @@ export default function HeaderBar() {
     if (!normalized.username) return;
     nav(`/app/profile/${encodeURIComponent(normalized.username)}`);
   };
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(RECENT_USER_SEARCH_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return;
-      setRecentSearches(
-        parsed.map((x) => normalizeSearchUser(x)).filter(Boolean).slice(0, RECENT_USER_SEARCH_LIMIT)
-      );
-    } catch {
-      // ignore bad local cache
-    }
-  }, []);
 
   useEffect(() => {
     function handleOutsideClick(event) {
@@ -181,11 +202,16 @@ export default function HeaderBar() {
   }, []);
 
   useEffect(() => {
+    const nextTheme = isDarkToggle ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", nextTheme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  }, [isDarkToggle]);
+
+  useEffect(() => {
     if (!accessToken) return;
     const query = searchQuery.trim();
     if (!query) {
-      setSearchResults([]);
-      setHighlightedIndex(-1);
+      requestIdRef.current += 1;
       return;
     }
     const nextRequestId = requestIdRef.current + 1;
@@ -281,9 +307,64 @@ export default function HeaderBar() {
     : "";
   const avatarLetter = (user?.username || "?").slice(0, 1).toUpperCase();
   const userAvatarUrl = resolveAvatarUrl(user?.avatarUrl || "");
+  const logoutConfirmModal =
+    isLogoutConfirmOpen && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="app-logout-confirm-overlay"
+            role="presentation"
+            onClick={() => {
+              if (!isLoggingOut) setIsLogoutConfirmOpen(false);
+            }}
+          >
+            <div
+              className="app-logout-confirm-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="header-logout-confirm-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="app-logout-confirm-close"
+                aria-label="Close logout confirmation"
+                onClick={() => setIsLogoutConfirmOpen(false)}
+                disabled={isLoggingOut}
+              >
+                x
+              </button>
+              <div className="app-logout-confirm-title" id="header-logout-confirm-title">
+                Log out?
+              </div>
+              <div className="app-logout-confirm-body">
+                You will need to sign in again to access your account.
+              </div>
+              <div className="app-logout-confirm-actions">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setIsLogoutConfirmOpen(false)}
+                  disabled={isLoggingOut}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-dark"
+                  onClick={confirmLogout}
+                  disabled={isLoggingOut}
+                >
+                  {isLoggingOut ? "Logging out..." : "Logout"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
-    <header className="app-header border-bottom bg-white">
+    <header className="app-header">
       <div className="app-header-row px-4 py-3">
         <div className="app-header-title">
           <div className="h5 mb-0 fw-semibold">{title}</div>
@@ -306,7 +387,12 @@ export default function HeaderBar() {
             value={searchQuery}
             onFocus={() => setIsDropdownOpen(true)}
             onChange={(e) => {
-              setSearchQuery(e.target.value);
+              const nextQuery = e.target.value;
+              setSearchQuery(nextQuery);
+              if (!nextQuery.trim()) {
+                setSearchResults([]);
+                setHighlightedIndex(-1);
+              }
               setIsDropdownOpen(true);
             }}
             onKeyDown={handleSearchKeyDown}
@@ -410,6 +496,19 @@ export default function HeaderBar() {
         </div>
 
         <div className="d-flex align-items-center gap-2 app-header-actions">
+          <button
+            type="button"
+            className={`themeToggle ${isDarkToggle ? "isDark" : "isLight"}`}
+            aria-label="Toggle monochrome theme"
+            title="Monochrome mode"
+            aria-pressed={isDarkToggle}
+            onClick={() => setIsDarkToggle((prev) => !prev)}
+          >
+            <span className={`themeToggleKnob ${isDarkToggle ? "isOn" : ""}`}>
+              <img src={isDarkToggle ? moonIcon : sunIcon} alt="" aria-hidden="true" />
+            </span>
+          </button>
+
           <div
             className="dropdown app-header-notifications-wrap"
             ref={notificationsWrapRef}
@@ -493,7 +592,7 @@ export default function HeaderBar() {
                   avatarLetter
                 )}
               </span>
-              <span className="d-none d-md-inline">{user?.username || "Account"}</span>
+              <span className="app-header-account-name">{user?.username || "Account"}</span>
             </button>
             <ul className="dropdown-menu dropdown-menu-end">
               <li>
@@ -507,7 +606,11 @@ export default function HeaderBar() {
                 </Link>
               </li>
               <li>
-                <button className="dropdown-item" type="button" onClick={handleLogout}>
+                <button
+                  className="dropdown-item"
+                  type="button"
+                  onClick={() => setIsLogoutConfirmOpen(true)}
+                >
                   Logout
                 </button>
               </li>
@@ -556,6 +659,7 @@ export default function HeaderBar() {
           {soundSilenceNotice}
         </div>
       ) : null}
+      {logoutConfirmModal}
     </header>
   );
 }

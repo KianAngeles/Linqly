@@ -9,13 +9,25 @@ import messageIcon from "../assets/icons/landing-icons/message-icon.png";
 import meetupIcon from "../assets/icons/landing-icons/meetup-icon.png";
 import rightArrowIcon from "../assets/icons/landing-icons/right-arrow.png";
 import whiteDropdownIcon from "../assets/icons/landing-icons/white-dropdown.png";
+import sunIcon from "../assets/icons/Header-icons/sun.png";
+import moonIcon from "../assets/icons/Header-icons/moon.png";
 import "./Landing.css";
+
+const THEME_STORAGE_KEY = "linqly.theme";
+
 export default function Landing() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [scrollY, setScrollY] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isDarkToggle, setIsDarkToggle] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const persisted = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (persisted === "dark") return true;
+    if (persisted === "light") return false;
+    return document.documentElement.getAttribute("data-theme") === "dark";
+  });
   const transitionRef = useRef(0);
 
   useEffect(() => {
@@ -75,12 +87,20 @@ export default function Landing() {
     };
   }, []);
 
+  useEffect(() => {
+    const nextTheme = isDarkToggle ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", nextTheme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  }, [isDarkToggle]);
+
   if (user) return <Navigate to="/app" replace />;
 
   const handleRouteTransition = (path) => (event) => {
     if (event) event.preventDefault();
     if (isTransitioning) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isMobileViewport = window.matchMedia("(max-width: 768px)").matches;
+    if (prefersReducedMotion || isMobileViewport) {
       navigate(path);
       return;
     }
@@ -108,6 +128,20 @@ export default function Landing() {
           <Link to="/" className="landing-logo">
             <span className="landing-logo-text">Linqly</span>
           </Link>
+          <div className="landing-topbar-center">
+            <button
+              type="button"
+              className={`landing-theme-toggle ${isDarkToggle ? "isDark" : "isLight"}`}
+              aria-label="Toggle monochrome theme"
+              title="Monochrome mode"
+              aria-pressed={isDarkToggle}
+              onClick={() => setIsDarkToggle((prev) => !prev)}
+            >
+              <span className={`landing-theme-toggle-knob ${isDarkToggle ? "isOn" : ""}`}>
+                <img src={isDarkToggle ? moonIcon : sunIcon} alt="" aria-hidden="true" />
+              </span>
+            </button>
+          </div>
           <div className="landing-topbar-actions">
             <Link to="/login" className="landing-btn landing-btn-ghost" onClick={handleRouteTransition("/login")}>Login</Link>
             <Link to="/register" className="landing-btn landing-btn-solid" onClick={handleRouteTransition("/register")}>Get started</Link>
@@ -537,4 +571,3 @@ export default function Landing() {
     </div>
   );
 }
-

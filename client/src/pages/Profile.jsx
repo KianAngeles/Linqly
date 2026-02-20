@@ -7,6 +7,7 @@ import { friendsApi } from "../api/friends.api";
 import { hangoutsApi } from "../api/hangouts.api";
 import { usersApi } from "../api/users.api";
 import { chatsApi } from "../api/chats.api";
+import { API_BASE } from "../api/http";
 import { socket } from "../socket";
 import EditProfileModal from "./profile/EditProfileModal";
 import UploadAvatarModal from "./profile/UploadAvatarModal";
@@ -312,7 +313,6 @@ export default function Profile() {
     }
     return value === null || value === undefined || String(value).trim() === "";
   };
-  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const canEdit = isOwnProfile && !previewMode;
   const isViewingOther = !isOwnProfile;
   const isPreviewingOwn = isOwnProfile && previewMode;
@@ -1854,6 +1854,13 @@ export default function Profile() {
                             ? friend.username.replace(/^@/, "")
                             : "";
                           const handle = uname ? `@${uname}` : "@user";
+                          const avatarFallback = String(
+                            uname || name || "?"
+                          )
+                            .replace(/^@+/, "")
+                            .trim()
+                            .charAt(0)
+                            .toUpperCase();
                           const avatar = friend?.avatarUrl || "";
                           const avatarUrl = avatar
                             ? avatar.startsWith("http://") ||
@@ -1889,7 +1896,9 @@ export default function Profile() {
                                     className="profile-friend-avatar"
                                   />
                                 ) : (
-                                  <div className="profile-friend-avatar profile-friend-avatar-placeholder" />
+                                  <div className="profile-friend-avatar profile-friend-avatar-placeholder">
+                                    {avatarFallback}
+                                  </div>
                                 )}
                               </div>
                               <div className="profile-friend-name">{name}</div>
@@ -1985,15 +1994,19 @@ export default function Profile() {
                 )}
               </div>
               <div className="profile-card">
-                <div className="d-flex align-items-center justify-content-between mb-3">
+                <div className="d-flex align-items-center justify-content-between mb-3 profile-hangouts-header">
                   <h5 className="fw-semibold mb-0">Recent Hangouts</h5>
-                  <div className="d-flex align-items-center gap-2">
+                  <div className="d-flex align-items-center gap-2 profile-hangouts-header-actions">
                     {isOwnerView && (
                       <span className="profile-chip">
                         {privacyLabels[activePrivacy]}
                       </span>
                     )}
-                    <div className="btn-group" role="group" aria-label="Hangouts view">
+                    <div
+                      className="btn-group profile-hangouts-view-toggle"
+                      role="group"
+                      aria-label="Hangouts view"
+                    >
                     <button
                       type="button"
                       className={`btn btn-outline-dark btn-sm ${

@@ -1,9 +1,64 @@
+# =========================
+# Dependencies
+# =========================
+node_modules/
+client/node_modules/
+server/node_modules/
 
-# env
+# =========================
+# Production Build Output
+# =========================
+dist/
+build/
+client/dist/
+server/dist/
+.vercel/
+.netlify/
+
+# =========================
+# Environment Variables (VERY IMPORTANT)
+# =========================
 .env
 .env.*
-client/.env
-client/.env.*
-server/.env
-server/.env.*
+!.env.example
 
+# =========================
+# Logs
+# =========================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Local Dev Files
+# =========================
+*.local
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+
+# =========================
+# Misc
+# =========================
+coverage/
+.cache/
+.eslintcache

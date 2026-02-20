@@ -4,6 +4,71 @@ import GroupOngoingCallMessage from "../../calls/GroupOngoingCallMessage";
 import GroupCallEndedMessage from "../../calls/GroupCallEndedMessage";
 import { GROUP_CALLS_ENABLED } from "../../../constants/featureFlags";
 
+function ActionIcon({ type, className = "" }) {
+  if (type === "reply") {
+    return (
+      <svg
+        viewBox="0 0 16 16"
+        width="16"
+        height="16"
+        aria-hidden="true"
+        className={`msg-action-icon ${className}`.trim()}
+      >
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M6.2 3.2 2.8 6.6l3.4 3.3M3.1 6.6h5.2c2.3 0 4.1 1.8 4.1 4.1v2"
+        />
+      </svg>
+    );
+  }
+  if (type === "react") {
+    return (
+      <svg
+        viewBox="0 0 16 16"
+        width="16"
+        height="16"
+        aria-hidden="true"
+        className={`msg-action-icon ${className}`.trim()}
+      >
+        <circle
+          cx="8"
+          cy="8"
+          r="6.1"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.65"
+        />
+        <circle cx="5.8" cy="6.6" r="0.9" fill="currentColor" />
+        <circle cx="10.2" cy="6.6" r="0.9" fill="currentColor" />
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M5.1 9.4c.8.9 1.8 1.3 2.9 1.3 1.1 0 2.1-.4 2.9-1.3"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      className={`msg-action-icon ${className}`.trim()}
+    >
+      <circle cx="8" cy="3.2" r="1.35" fill="currentColor" />
+      <circle cx="8" cy="8" r="1.35" fill="currentColor" />
+      <circle cx="8" cy="12.8" r="1.35" fill="currentColor" />
+    </svg>
+  );
+}
 export default function MessageItem({
   message,
   isMine,
@@ -25,9 +90,6 @@ export default function MessageItem({
   reactedEmojis,
   onEmojiPick,
   renderMessageText,
-  replyIcon,
-  reactIcon,
-  moreIcon,
   reactions,
   seenIndicator,
   onImageClick,
@@ -296,14 +358,7 @@ export default function MessageItem({
                       data-more-toggle="true"
                       onClick={onMoreToggle}
                     >
-                      <img
-                        src={moreIcon}
-                        alt="More"
-                        width={16}
-                        height={16}
-                        draggable="false"
-                        className="msg-more-icon"
-                      />
+                      <ActionIcon type="more" className="msg-more-icon" />
                     </button>
                     <button
                       type="button"
@@ -312,13 +367,7 @@ export default function MessageItem({
                       data-react-toggle="true"
                       onClick={onReactToggle}
                     >
-                      <img
-                        src={reactIcon}
-                        alt="React"
-                        width={16}
-                        height={16}
-                        draggable="false"
-                      />
+                      <ActionIcon type="react" />
                     </button>
                     <button
                       type="button"
@@ -326,13 +375,7 @@ export default function MessageItem({
                       title="Reply"
                       onClick={onReplyToggle}
                     >
-                      <img
-                        src={replyIcon}
-                        alt="Reply"
-                        width={16}
-                        height={16}
-                        draggable="false"
-                      />
+                      <ActionIcon type="reply" />
                     </button>
                   </>
                 ) : (
@@ -343,13 +386,7 @@ export default function MessageItem({
                       title="Reply"
                       onClick={onReplyToggle}
                     >
-                      <img
-                        src={replyIcon}
-                        alt="Reply"
-                        width={16}
-                        height={16}
-                        draggable="false"
-                      />
+                      <ActionIcon type="reply" />
                     </button>
                     <button
                       type="button"
@@ -358,13 +395,7 @@ export default function MessageItem({
                       data-react-toggle="true"
                       onClick={onReactToggle}
                     >
-                      <img
-                        src={reactIcon}
-                        alt="React"
-                        width={16}
-                        height={16}
-                        draggable="false"
-                      />
+                      <ActionIcon type="react" />
                     </button>
                     <button
                       type="button"
@@ -373,14 +404,7 @@ export default function MessageItem({
                       data-more-toggle="true"
                       onClick={onMoreToggle}
                     >
-                      <img
-                        src={moreIcon}
-                        alt="More"
-                        width={16}
-                        height={16}
-                        draggable="false"
-                        className="msg-more-icon"
-                      />
+                      <ActionIcon type="more" className="msg-more-icon" />
                     </button>
                   </>
                 )}

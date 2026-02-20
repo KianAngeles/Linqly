@@ -94,11 +94,11 @@ export default function HangoutDetailCard({
                   {driveDistanceLoading
                     ? "Calculating..."
                     : driveDistanceKm !== null
-                      ? `${driveDistanceKm.toFixed(2)} km (driving)`
+                      ? `${driveDistanceKm.toFixed(2)} km`
                       : `${distanceKm(userLocation, {
                           lng: selected.location.coordinates[0],
                           lat: selected.location.coordinates[1],
-                        })?.toFixed(2)} km (straight-line)`}
+                        })?.toFixed(2)} km`}
                 </div>
                 {driveDistanceError && (
                   <div className="text-muted small">{driveDistanceError}</div>

@@ -1,3 +1,4 @@
+import { authFetch } from "./http";
 const API = import.meta.env.VITE_API_URL;
 
 export const messagesApi = {
@@ -6,7 +7,7 @@ export const messagesApi = {
     url.searchParams.set("chatId", chatId);
     if (cursor) url.searchParams.set("cursor", cursor);
 
-    const r = await fetch(url.toString(), {
+    const r = await authFetch(url.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
@@ -18,7 +19,7 @@ export const messagesApi = {
 
   async send(accessToken, chatId, text, replyTo = null) {
     const start = performance.now();
-    const r = await fetch(`${API}/messages`, {
+    const r = await authFetch(`${API}/messages`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -43,7 +44,7 @@ export const messagesApi = {
     form.append("chatId", chatId);
     if (replyTo) form.append("replyTo", replyTo);
 
-    const r = await fetch(`${API}/messages/image`, {
+    const r = await authFetch(`${API}/messages/image`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -61,7 +62,7 @@ export const messagesApi = {
     form.append("chatId", chatId);
     if (replyTo) form.append("replyTo", replyTo);
 
-    const r = await fetch(`${API}/messages/file`, {
+    const r = await authFetch(`${API}/messages/file`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -79,7 +80,7 @@ export const messagesApi = {
     form.append("chatId", chatId);
     if (replyTo) form.append("replyTo", replyTo);
 
-    const r = await fetch(`${API}/messages/voice`, {
+    const r = await authFetch(`${API}/messages/voice`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -91,9 +92,9 @@ export const messagesApi = {
     return data;
   },
 
-  // ✅ add this
+  // Add reaction
   async react(accessToken, messageId, emoji) {
-    const r = await fetch(`${API}/messages/${messageId}/react`, {
+    const r = await authFetch(`${API}/messages/${messageId}/react`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -108,9 +109,9 @@ export const messagesApi = {
     return data; // { ok: true, reactions: [...] }
   },
 
-  // ✅ add this
+  // Remove reaction
   async unreact(accessToken, messageId) {
-    const r = await fetch(`${API}/messages/${messageId}/unreact`, {
+    const r = await authFetch(`${API}/messages/${messageId}/unreact`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -124,7 +125,7 @@ export const messagesApi = {
   },
 
   async delete(accessToken, messageId) {
-    const r = await fetch(`${API}/messages/${messageId}`, {
+    const r = await authFetch(`${API}/messages/${messageId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -136,7 +137,7 @@ export const messagesApi = {
   },
 
   async sendSystem(accessToken, chatId, text) {
-    const r = await fetch(`${API}/messages/system`, {
+    const r = await authFetch(`${API}/messages/system`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -152,7 +153,7 @@ export const messagesApi = {
   },
 
   async sendCallLog(accessToken, chatId, callStatus, durationSec = 0, callType = "audio") {
-    const r = await fetch(`${API}/messages/call-log`, {
+    const r = await authFetch(`${API}/messages/call-log`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -168,7 +169,7 @@ export const messagesApi = {
   },
 
   async downloadFile(accessToken, messageId) {
-    const r = await fetch(`${API}/messages/${messageId}/download`, {
+    const r = await authFetch(`${API}/messages/${messageId}/download`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
@@ -185,7 +186,7 @@ export const messagesApi = {
     url.searchParams.set("kind", kind);
     url.searchParams.set("limit", String(limit));
 
-    const r = await fetch(url.toString(), {
+    const r = await authFetch(url.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });

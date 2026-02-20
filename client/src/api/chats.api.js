@@ -1,8 +1,9 @@
+import { authFetch } from "./http";
 const API = import.meta.env.VITE_API_URL;
 
 export const chatsApi = {
   async createGroup(accessToken, name, memberIds) {
-    const r = await fetch(`${API}/chats/group`, {
+    const r = await authFetch(`${API}/chats/group`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -17,7 +18,7 @@ export const chatsApi = {
   },
 
   async createDirect(accessToken, userId) {
-    const r = await fetch(`${API}/chats/direct`, {
+    const r = await authFetch(`${API}/chats/direct`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -32,7 +33,7 @@ export const chatsApi = {
   },
 
   async list(accessToken) {
-    const r = await fetch(`${API}/chats`, {
+    const r = await authFetch(`${API}/chats`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
@@ -42,7 +43,7 @@ export const chatsApi = {
   },
 
   async updateSettings(accessToken, chatId, patch) {
-    const r = await fetch(`${API}/chats/${chatId}/settings`, {
+    const r = await authFetch(`${API}/chats/${chatId}/settings`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -57,7 +58,7 @@ export const chatsApi = {
   },
 
   async deleteForMe(accessToken, chatId) {
-    const r = await fetch(`${API}/chats/${chatId}/delete`, {
+    const r = await authFetch(`${API}/chats/${chatId}/delete`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -68,7 +69,7 @@ export const chatsApi = {
   },
 
   async leaveGroup(accessToken, chatId) {
-    const r = await fetch(`${API}/chats/${chatId}/leave`, {
+    const r = await authFetch(`${API}/chats/${chatId}/leave`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -79,7 +80,7 @@ export const chatsApi = {
   },
 
   async addMember(accessToken, chatId, userId) {
-    const r = await fetch(`${API}/chats/${chatId}/members`, {
+    const r = await authFetch(`${API}/chats/${chatId}/members`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -94,7 +95,7 @@ export const chatsApi = {
   },
 
   async getGroupSettings(accessToken, chatId) {
-    const r = await fetch(`${API}/chats/${chatId}`, {
+    const r = await authFetch(`${API}/chats/${chatId}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
@@ -104,7 +105,7 @@ export const chatsApi = {
   },
 
   async updateGroup(accessToken, chatId, patch) {
-    const r = await fetch(`${API}/chats/${chatId}/group`, {
+    const r = await authFetch(`${API}/chats/${chatId}/group`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -121,7 +122,7 @@ export const chatsApi = {
   async uploadGroupAvatar(accessToken, chatId, file) {
     const form = new FormData();
     form.append("avatar", file);
-    const r = await fetch(`${API}/chats/${chatId}/avatar`, {
+    const r = await authFetch(`${API}/chats/${chatId}/avatar`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -133,7 +134,7 @@ export const chatsApi = {
   },
 
   async removeMember(accessToken, chatId, userId) {
-    const r = await fetch(`${API}/chats/${chatId}/members/${userId}/remove`, {
+    const r = await authFetch(`${API}/chats/${chatId}/members/${userId}/remove`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -144,7 +145,7 @@ export const chatsApi = {
   },
 
   async makeAdmin(accessToken, chatId, userId) {
-    const r = await fetch(`${API}/chats/${chatId}/admins/${userId}`, {
+    const r = await authFetch(`${API}/chats/${chatId}/admins/${userId}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -155,7 +156,7 @@ export const chatsApi = {
   },
 
   async removeAdmin(accessToken, chatId, userId) {
-    const r = await fetch(`${API}/chats/${chatId}/admins/${userId}`, {
+    const r = await authFetch(`${API}/chats/${chatId}/admins/${userId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -166,7 +167,7 @@ export const chatsApi = {
   },
 
   async approveJoin(accessToken, chatId, userId) {
-    const r = await fetch(`${API}/chats/${chatId}/join-request/${userId}/approve`, {
+    const r = await authFetch(`${API}/chats/${chatId}/join-request/${userId}/approve`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -177,7 +178,7 @@ export const chatsApi = {
   },
 
   async rejectJoin(accessToken, chatId, userId) {
-    const r = await fetch(`${API}/chats/${chatId}/join-request/${userId}/reject`, {
+    const r = await authFetch(`${API}/chats/${chatId}/join-request/${userId}/reject`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -188,7 +189,7 @@ export const chatsApi = {
   },
 
   async getReads(accessToken, chatId) {
-    const r = await fetch(`${API}/chats/${chatId}/reads`, {
+    const r = await authFetch(`${API}/chats/${chatId}/reads`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
@@ -198,7 +199,7 @@ export const chatsApi = {
   },
 
   async getOngoingCallState(accessToken, chatId) {
-    const r = await fetch(`${API}/chats/${chatId}/ongoing-call`, {
+    const r = await authFetch(`${API}/chats/${chatId}/ongoing-call`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });

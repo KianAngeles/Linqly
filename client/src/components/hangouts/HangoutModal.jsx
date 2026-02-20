@@ -68,7 +68,41 @@ export default function HangoutModal({
                           },
                           field: { clearable: true },
                           actionBar: { actions: ["clear", "accept"] },
-                          popper: { placement: "bottom-start" },
+                          popper: {
+                            placement: "bottom-start",
+                            sx: {
+                              zIndex: 2200,
+                              "& .MuiPaper-root": {
+                                backgroundColor: "var(--surface)",
+                                color: "var(--text)",
+                                border: "1px solid var(--border)",
+                                boxShadow: "var(--shadow-md)",
+                              },
+                              "& .MuiPickersCalendarHeader-label, & .MuiTypography-root": {
+                                color: "var(--text)",
+                              },
+                              "& .MuiPickersDay-root, & .MuiPickersMonth-monthButton, & .MuiPickersYear-yearButton":
+                                {
+                                  color: "var(--text)",
+                                },
+                              "& .MuiPickersDay-root:hover, & .MuiPickersMonth-monthButton:hover, & .MuiPickersYear-yearButton:hover":
+                                {
+                                  backgroundColor: "var(--bg-muted)",
+                                },
+                              "& .MuiPickersDay-root.Mui-selected, & .MuiPickersMonth-monthButton.Mui-selected, & .MuiPickersYear-yearButton.Mui-selected":
+                                {
+                                  backgroundColor: "var(--text)",
+                                  color: "var(--bg)",
+                                },
+                              "& .MuiButtonBase-root, & .MuiIconButton-root, & .MuiSvgIcon-root":
+                                {
+                                  color: "var(--text-muted)",
+                                },
+                              "& .MuiPickersLayout-actionBar .MuiButton-root": {
+                                color: "var(--text)",
+                              },
+                            },
+                          },
                         }}
                       />
                     </LocalizationProvider>

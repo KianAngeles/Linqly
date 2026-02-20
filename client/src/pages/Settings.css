@@ -124,3 +124,76 @@
   background: #0b0f1a !important;
   color: #ffffff !important;
 }
+
+html[data-theme="dark"] .privacy-card {
+  background: var(--surface);
+  border-color: var(--border) !important;
+  color: var(--text);
+}
+
+html[data-theme="dark"] .privacy-row {
+  border-top-color: var(--divider);
+}
+
+html[data-theme="dark"] .privacy-label {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .privacy-card .text-muted {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .privacy-option {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .privacy-option.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+html[data-theme="dark"] .settings-page > .border.rounded.p-3.mb-4 {
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .avatar-cropper-card,
+html[data-theme="dark"] .avatar-cropper-header,
+html[data-theme="dark"] .avatar-cropper-controls {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .settings-page .form-label,
+html[data-theme="dark"] .settings-page .text-muted {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .settings-page .form-control,
+html[data-theme="dark"] .settings-page .form-select,
+html[data-theme="dark"] .settings-page .form-range {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .settings-page .form-control::placeholder {
+  color: var(--text-subtle);
+}
+
+html[data-theme="dark"] .settings-page .form-control:focus,
+html[data-theme="dark"] .settings-page .form-select:focus {
+  border-color: var(--border-strong);
+  box-shadow: var(--focus-ring);
+}
+
+html[data-theme="dark"] .settings-page .form-control[type="file"]::file-selector-button {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .settings-page .form-control[type="file"]::file-selector-button:hover {
+  background: var(--bg-muted);
+}

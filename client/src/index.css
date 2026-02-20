@@ -75,7 +75,7 @@
   --dur-slow: 420ms;
 
   /* ----- Buttons ----- */
-  --btn-h: 44px;
+  --btn-h: 40px;
   --btn-h-lg: 52px;
   --btn-radius: 12px;
   --btn-radius-pill: 999px;
@@ -122,6 +122,27 @@
   --glass-blur: 12px;
 }
 
+html[data-theme="dark"] .text-muted {
+  color: var(--text-muted) !important;
+}
+
+/* ============================= */
+/* Text Selection (Global)       */
+/* ============================= */
+
+/* Default (Light theme) */
+::selection {
+  background: #000000;
+  color: #ffffff;
+}
+
+/* Dark theme override */
+html[data-theme="dark"] ::selection {
+  background: #ffffff;
+  color: #000000;
+}
+
+
 /* =========================================================
    3) Base Reset + Page Defaults
    ========================================================= */
@@ -163,8 +184,62 @@ a:hover {
   text-decoration: none;
 }
 
+/* Normalize Bootstrap dropdown pressed/active colors to theme tokens */
+.dropdown-menu {
+  --bs-dropdown-link-active-bg: rgba(0, 0, 0, 0.06);
+  --bs-dropdown-link-active-color: var(--text);
+}
+
+:root[data-theme="dark"] .dropdown-menu {
+  --bs-dropdown-link-active-bg: rgba(255, 255, 255, 0.08);
+  --bs-dropdown-link-active-color: var(--text);
+}
+
 ::selection {
   background: rgba(0, 0, 0, 0.12);
+}
+
+/* =========================================================
+   Global Scrollbars
+   ========================================================= */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.28) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.4);
+  background-clip: padding-box;
+}
+
+:root[data-theme="dark"] * {
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.24);
+  background-clip: padding-box;
+}
+
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.38);
+  background-clip: padding-box;
 }
 
 /* =========================================================
@@ -251,13 +326,17 @@ textarea:focus {
   box-shadow: var(--focus-ring);
 }
 
-label {
-  display: inline-block;
-  font-family: var(--font-ui);
-  font-size: 0.9rem;
-  color: var(--text);
-  margin-bottom: 6px;
+/* Enforce monochrome focus for Bootstrap and native text inputs */
+.form-control:focus,
+.form-select:focus,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):focus,
+textarea:focus,
+select:focus {
+  border-color: var(--border-strong) !important;
+  box-shadow: var(--focus-ring) !important;
+  outline: none;
 }
+
 
 /* Helper text (hint/error/success under inputs) */
 .helper {
@@ -275,12 +354,11 @@ label {
    Use: .btn .btn-solid / .btn-outline / .btn-ghost
    ========================================================= */
 .btn {
-  height: var(--btn-h);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 0 16px;
+  padding: 10px 16px;
 
   border-radius: var(--btn-radius);
   border: 1px solid transparent;

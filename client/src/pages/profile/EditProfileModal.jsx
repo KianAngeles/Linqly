@@ -137,8 +137,13 @@ export default function EditProfileModal({
       >
         <div className="profile-modal-header">
           <div className="fw-semibold">Edit Profile</div>
-          <button type="button" className="btn btn-sm btn-link" onClick={onClose}>
-            Close
+          <button
+            type="button"
+            className="profile-modal-close-x"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            x
           </button>
         </div>
 

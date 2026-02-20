@@ -1,8 +1,9 @@
+import { authFetch } from "./http";
 const API = import.meta.env.VITE_API_URL;
 
 export const messageRequestsApi = {
   async send(accessToken, toUserId, text) {
-    const r = await fetch(`${API}/message-requests`, {
+    const r = await authFetch(`${API}/message-requests`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -19,7 +20,7 @@ export const messageRequestsApi = {
   async list(accessToken, limit = 8) {
     const url = new URL(`${API}/message-requests`);
     url.searchParams.set("limit", String(limit));
-    const r = await fetch(url.toString(), {
+    const r = await authFetch(url.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
@@ -31,7 +32,7 @@ export const messageRequestsApi = {
   async getById(accessToken, requestId, cursor = "") {
     const url = new URL(`${API}/message-requests/${requestId}`);
     if (cursor) url.searchParams.set("cursor", cursor);
-    const r = await fetch(url.toString(), {
+    const r = await authFetch(url.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
     });
@@ -41,7 +42,7 @@ export const messageRequestsApi = {
   },
 
   async accept(accessToken, requestId) {
-    const r = await fetch(`${API}/message-requests/${requestId}/accept`, {
+    const r = await authFetch(`${API}/message-requests/${requestId}/accept`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -52,7 +53,7 @@ export const messageRequestsApi = {
   },
 
   async decline(accessToken, requestId) {
-    const r = await fetch(`${API}/message-requests/${requestId}/decline`, {
+    const r = await authFetch(`${API}/message-requests/${requestId}/decline`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -63,7 +64,7 @@ export const messageRequestsApi = {
   },
 
   async ignore(accessToken, requestId) {
-    const r = await fetch(`${API}/message-requests/${requestId}/ignore`, {
+    const r = await authFetch(`${API}/message-requests/${requestId}/ignore`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
       credentials: "include",

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { authApi } from "../api/auth.api";
+import { API_BASE, authFetch, syncAccessToken } from "../api/http";
 import { socket } from "../socket";
 import { isChatActive } from "./chatsStore";
 import {
@@ -21,7 +22,7 @@ export function AuthProvider({ children }) {
     if (!token) return;
 
     try {
-      const data = await fetch(`${import.meta.env.VITE_API_URL}/chats`, {
+      const data = await authFetch(`${API_BASE}/chats`, {
         headers: { Authorization: `Bearer ${token}` },
         credentials: "include",
       }).then((r) => r.json());
@@ -70,6 +71,22 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    syncAccessToken(accessToken);
+  }, [accessToken]);
+
+  useEffect(() => {
+    const onTokenRefreshed = (event) => {
+      const nextToken = String(event?.detail?.accessToken || "").trim();
+      if (!nextToken) return;
+      setAccessToken((prev) => (prev === nextToken ? prev : nextToken));
+    };
+    window.addEventListener("auth:access-token-refreshed", onTokenRefreshed);
+    return () => {
+      window.removeEventListener("auth:access-token-refreshed", onTokenRefreshed);
+    };
+  }, []);
+
+  useEffect(() => {
     refreshChatSettings().catch(() => {});
   }, [accessToken]);
 
@@ -111,7 +128,7 @@ export function AuthProvider({ children }) {
     const r = await authApi.login({ email, password });
     setAccessToken(r.accessToken);
     setUser(r.user);
-    await refreshChatSettings();
+    await refreshChatSettings(r.accessToken);
   }
 
   async function register(displayName, username, email, password, gender) {
@@ -124,7 +141,7 @@ export function AuthProvider({ children }) {
     });
     setAccessToken(r.accessToken);
     setUser(r.user);
-    await refreshChatSettings();
+    await refreshChatSettings(r.accessToken);
   }
 
   async function logout() {
@@ -137,6 +154,7 @@ export function AuthProvider({ children }) {
     } finally {
       setUser(null);
       setAccessToken(null);
+      syncAccessToken(null);
       joinedChatIdsRef.current = new Set();
     }
   }

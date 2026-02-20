@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../store/AuthContext";
 import { friendsApi } from "../api/friends.api";
+import { chatsApi } from "../api/chats.api";
 import { usersApi } from "../api/users.api";
+import { API_BASE } from "../api/http";
 import { socket } from "../socket";
 import chatBubbleIcon from "../assets/icons/friends-icons/chat-bubble.png";
 import vertiMoreIcon from "../assets/icons/friends-icons/verti-more.png";
@@ -265,7 +267,22 @@ export default function Friends() {
     }
   }
 
-  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  async function messageFriend(userId) {
+    if (!userId) return;
+    setErr("");
+    try {
+      const data = await chatsApi.createDirect(accessToken, userId);
+      const nextId = String(data?.chatId || "");
+      if (!nextId) {
+        navigate("/app/chats");
+        return;
+      }
+      navigate(`/app/chats/${nextId}`);
+    } catch (e) {
+      setErr(e.message);
+    }
+  }
+
   const resolveAvatarUrl = (rawUrl) => {
     if (!rawUrl) return "";
     if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) return rawUrl;
@@ -509,8 +526,7 @@ export default function Friends() {
                           type="button"
                           className="friends-list-action"
                           onClick={() => {
-                            if (!friend.username) return;
-                            navigate(`/app/chats?start=${friend.username}`);
+                            messageFriend(friend.id);
                           }}
                           aria-label="Message"
                         >
@@ -647,10 +663,11 @@ export default function Friends() {
               <div className="fw-semibold">Block {confirmBlock.username}?</div>
               <button
                 type="button"
-                className="btn btn-sm btn-link"
+                className="friends-modal-close-x"
+                aria-label="Close"
                 onClick={() => setConfirmBlock(null)}
               >
-                Close
+                x
               </button>
             </div>
             <div className="friends-modal-body">

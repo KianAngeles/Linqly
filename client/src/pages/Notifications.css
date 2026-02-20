@@ -1,5 +1,5 @@
 .notifications-page {
-  width: min(50%, 1080px);
+  width: min(60%, 1080px);
   margin: 0 auto;
   padding: 18px 14px;
   color: #111111;
@@ -187,6 +187,94 @@
   color: #6b7280;
 }
 
+/* ------------------------------- */
+/* Dark theme overrides            */
+/* ------------------------------- */
+html[data-theme="dark"] .notifications-page {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .notifications-title,
+html[data-theme="dark"] .notifications-summary-value,
+html[data-theme="dark"] .notifications-empty-title {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .notifications-summary-label,
+html[data-theme="dark"] .notifications-empty-subtext {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .notifications-main,
+html[data-theme="dark"] .notifications-summary-card {
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme="dark"] .notifications-group-heading {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border-bottom-color: var(--divider);
+}
+
+html[data-theme="dark"] .notifications-group + .notifications-group {
+  border-top-color: var(--divider);
+}
+
+html[data-theme="dark"] .notifications-filter-chip {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .notifications-filter-chip.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+html[data-theme="dark"] .notifications-action-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+html[data-theme="dark"] .notifications-action-btn:hover,
+html[data-theme="dark"] .notifications-action-btn:focus {
+  filter: brightness(0.92);
+}
+
+html[data-theme="dark"] .notifications-action-btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .notifications-action-btn-secondary:hover,
+html[data-theme="dark"] .notifications-action-btn-secondary:focus {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .notifications-empty-icon {
+  filter: brightness(0) invert(1);
+}
+
+html[data-theme="dark"] .notifications-filter-chip:hover {
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .notifications-filter-chip.is-active:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  filter: none;
+}
+
+html[data-theme="dark"] .notifications-page .btn:hover,
+html[data-theme="dark"] .notifications-page .btn:focus {
+  filter: brightness(0.92);
+}
 @media (max-width: 980px) {
   .notifications-layout {
     grid-template-columns: 1fr;
@@ -196,4 +284,3 @@
     max-height: none;
   }
 }
-

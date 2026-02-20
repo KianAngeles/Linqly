@@ -2,9 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { socket } from "../socket";
 import { GROUP_CALLS_ENABLED } from "../constants/featureFlags";
 import { useAuth } from "./AuthContext";
+import { API_BASE, authFetch } from "../api/http";
 
 const CallContext = createContext(null);
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 function createCallId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -72,7 +72,7 @@ export function CallProvider({ children }) {
 
       if (!nextCallId && accessToken) {
         try {
-          const res = await fetch(`${API_BASE}/chats/${chatId}/ongoing-call`, {
+          const res = await authFetch(`${API_BASE}/chats/${chatId}/ongoing-call`, {
             headers: { Authorization: `Bearer ${accessToken}` },
             credentials: "include",
           });

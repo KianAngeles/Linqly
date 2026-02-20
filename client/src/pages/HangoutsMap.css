@@ -18,6 +18,101 @@
   display: grid;
   gap: 0;
   height: 100%;
+  min-height: 0;
+  position: relative;
+}
+
+.hangouts-map-page.is-desktop .hangouts-map-layout {
+  grid-template-columns: 1fr;
+  grid-template-areas: "map";
+  gap: 0;
+  padding: 0;
+}
+
+.hangouts-map-page.is-desktop .hangouts-map-center {
+  grid-area: map;
+}
+
+.map-desktop-panel {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.map-desktop-panel-left {
+  grid-area: left;
+}
+
+.map-desktop-panel-right {
+  grid-area: right;
+}
+
+.map-desktop-panel-inner {
+  height: 100%;
+  overflow: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.map-panel-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.map-controls-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.map-controls-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.map-panel-stack .map-search {
+  position: static;
+  left: auto;
+  top: auto;
+  width: 100%;
+  z-index: auto;
+}
+
+.map-panel-stack .map-hint {
+  position: static;
+}
+
+.map-panel-stack .map-within-body {
+  max-height: none;
+}
+
+.map-controls-stack .radius-controls,
+.map-controls-stack .hangouts-location-toggle,
+.map-controls-stack .map-joined-panel {
+  width: 100%;
+}
+
+.map-controls-stack .map-joined-body {
+  max-height: none;
+}
+
+.hangouts-map-page.is-desktop .map-panel-stack.map-panel-desktop .map-within-body {
+  max-height: 280px;
+}
+
+.hangouts-map-page.is-desktop .map-controls-stack.map-controls-desktop .radius-controls,
+.hangouts-map-page.is-desktop .map-controls-stack.map-controls-desktop .hangouts-location-toggle,
+.hangouts-map-page.is-desktop .map-controls-stack.map-controls-desktop .map-joined-panel {
+  width: 260px;
+}
+
+.hangouts-map-page.is-desktop .map-controls-stack.map-controls-desktop .map-joined-body {
+  max-height: 740px;
+}
+
+.hangout-list-item {
+  min-height: 60px;
 }
 
 .hangouts-map-toolbar {
@@ -321,6 +416,244 @@
   justify-content: flex-end;
 }
 
+.map-floating-actions {
+  position: absolute;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.map-fab-btn {
+  min-width: 72px;
+  min-height: 44px;
+  border: none;
+  border-radius: 999px;
+  background: #111827;
+  color: #ffffff;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.map-floating-actions .map-recenter-btn {
+  min-height: 44px !important;
+  min-width: 88px;
+  padding: 10px 14px !important;
+}
+
+.map-fab-btn:hover,
+.map-fab-btn:focus-visible {
+  background: #0b0f1a;
+}
+
+.map-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 12, 18, 0.4);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+  z-index: 1200;
+}
+
+.map-drawer-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.map-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: min(360px, 85vw);
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  box-shadow: 0 20px 42px rgba(15, 23, 42, 0.2);
+  z-index: 1210;
+  display: flex;
+  flex-direction: column;
+  transition: transform 220ms ease;
+}
+
+.map-drawer--left {
+  left: 0;
+  transform: translateX(-100%);
+}
+
+.map-drawer--right {
+  right: 0;
+  transform: translateX(100%);
+}
+
+.map-drawer.is-open {
+  transform: translateX(0);
+}
+
+.map-drawer-header {
+  min-height: 56px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.map-drawer-close {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.map-drawer-close:hover,
+.map-drawer-close:focus-visible {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.map-drawer-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+  padding: 10px 12px;
+}
+
+.map-drawer-body .map-panel-stack .map-search,
+.map-drawer-body .map-controls-stack .radius-controls,
+.map-drawer-body .map-controls-stack .hangouts-location-toggle,
+.map-drawer-body .map-controls-stack .map-joined-panel {
+  width: 100%;
+}
+
+.map-mobile-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9;
+  border-radius: 14px 14px 0 0;
+  border: 1px solid #dee2e6;
+  border-bottom: none;
+  background: #ffffff;
+  box-shadow: 0 -12px 30px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  transition: height 220ms ease;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.map-mobile-sheet.is-collapsed {
+  height: 72px;
+}
+
+.map-mobile-sheet.is-mid {
+  height: 45vh;
+}
+
+.map-mobile-sheet.is-full {
+  height: 85vh;
+}
+
+.map-mobile-sheet-handle {
+  min-height: 56px;
+  border: none;
+  background: transparent;
+  border-bottom: 1px solid #e9ecef;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.map-mobile-sheet-grip {
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: #adb5bd;
+}
+
+.map-mobile-sheet-title {
+  font-size: 0.85rem;
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.map-mobile-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px 12px;
+}
+
+.map-mobile-sheet-body .map-panel-stack {
+  gap: 10px;
+}
+
+.map-controls-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 12, 18, 0.4);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+  z-index: 1250;
+}
+
+.map-controls-sheet-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.map-controls-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: min(85vh, 760px);
+  border-radius: 14px 14px 0 0;
+  border: 1px solid #dee2e6;
+  border-bottom: none;
+  background: #ffffff;
+  transform: translateY(102%);
+  transition: transform 220ms ease;
+  z-index: 1260;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.map-controls-sheet.is-open {
+  transform: translateY(0);
+}
+
+.map-controls-sheet-header {
+  min-height: 56px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.map-controls-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px 12px;
+}
+
 .map-left-detail .hangouts-detail-card {
   position: static;
   width: 100%;
@@ -421,9 +754,19 @@
 
 .map-joined-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+.map-joined-header-text {
+  min-width: 0;
+}
+
+.map-joined-subtitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .map-joined-body {
@@ -482,14 +825,14 @@
   transition: background 120ms ease;
 }
 
+.map-toggle-icon-btn:hover {
+  background: #f8f9fa;
+}
+
 .map-toggle-icon-btn img {
   width: 18px;
   height: 18px;
   display: block;
-}
-
-.map-toggle-icon-btn:hover {
-  background: #f8f9fa;
 }
 
 .hangout-pin-simple {
@@ -1065,6 +1408,63 @@
   box-shadow: 0 0 0 6px rgba(17, 24, 39, 0.18);
 }
 
+@media (max-width: 1199px) {
+  .hangouts-map-page {
+    padding: 0;
+  }
+
+  .hangouts-map-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas: "map";
+  }
+
+  .hangouts-map-center {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .hangouts-map-page.is-tablet .hangouts-map-center {
+    height: 100%;
+  }
+
+  .hangouts-map-page.is-tablet .hangouts-map .mapboxgl-ctrl-bottom-right {
+    right: 12px;
+    bottom: calc(154px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 767.98px) {
+  .hangouts-map-page.is-mobile .hangouts-map .mapboxgl-ctrl-bottom-right {
+    right: 10px;
+  }
+
+  .hangouts-map-page.is-mobile.mobile-sheet-collapsed .map-floating-actions {
+    bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .hangouts-map-page.is-mobile.mobile-sheet-collapsed .hangouts-map .mapboxgl-ctrl-bottom-right {
+    bottom: calc(118px + env(safe-area-inset-bottom));
+  }
+
+  .hangouts-map-page.is-mobile.mobile-sheet-mid .hangouts-map .mapboxgl-ctrl-bottom-right {
+    bottom: calc(47vh + 20px + env(safe-area-inset-bottom));
+  }
+
+  .hangouts-map-page.is-mobile.mobile-sheet-full .hangouts-map .mapboxgl-ctrl-bottom-right {
+    bottom: calc(87vh + env(safe-area-inset-bottom));
+  }
+
+  .hangouts-map-page.is-mobile.mobile-sheet-mid .map-floating-actions {
+    bottom: calc(47vh + 26px + env(safe-area-inset-bottom));
+  }
+
+  .hangouts-map-page.is-mobile.mobile-sheet-full .map-floating-actions {
+    bottom: calc(87vh + 8px + env(safe-area-inset-bottom));
+  }
+}
+
 @media (max-width: 991px) {
   .hangouts-map-layout {
     grid-template-columns: 1fr;
@@ -1149,4 +1549,522 @@
 }
 .hangout-list-body {
   min-width: 0;
+}
+
+/* Dark overrides */
+html[data-theme="dark"] .hangouts-map-page {
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangouts-map,
+html[data-theme="dark"] .hangouts-map-page .hangouts-map-canvas {
+  background: var(--bg);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-gate,
+html[data-theme="dark"] .hangouts-map-page .map-hint,
+html[data-theme="dark"] .hangouts-map-page .map-locating,
+html[data-theme="dark"] .hangouts-map-page .map-empty,
+html[data-theme="dark"] .hangouts-map-page .map-search,
+html[data-theme="dark"] .hangouts-map-page .radius-controls,
+html[data-theme="dark"] .hangouts-map-page .hangouts-location-toggle,
+html[data-theme="dark"] .hangouts-map-page .map-joined-panel,
+html[data-theme="dark"] .hangouts-map-page .map-within-panel {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-desktop-panel-inner,
+html[data-theme="dark"] .hangouts-map-page .map-drawer,
+html[data-theme="dark"] .hangouts-map-page .map-mobile-sheet,
+html[data-theme="dark"] .hangouts-map-page .map-controls-sheet {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-mobile-sheet-handle,
+html[data-theme="dark"] .hangouts-map-page .map-controls-sheet-header,
+html[data-theme="dark"] .hangouts-map-page .map-drawer-header {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-mobile-sheet-title {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-mobile-sheet-grip {
+  background: var(--text-subtle);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-drawer-close {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-drawer-close:hover,
+html[data-theme="dark"] .hangouts-map-page .map-drawer-close:focus-visible {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-fab-btn {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-fab-btn:hover,
+html[data-theme="dark"] .hangouts-map-page .map-fab-btn:focus-visible {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-location-disabled {
+  background: rgba(10, 14, 20, 0.84);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-location-disabled-subtitle,
+html[data-theme="dark"] .hangouts-map-page .hangouts-panel-muted,
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-empty,
+html[data-theme="dark"] .hangouts-map-page .hangout-list-subtitle,
+html[data-theme="dark"] .hangouts-map-page .hangout-list-meta,
+html[data-theme="dark"] .hangouts-map-page .text-muted {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-search .form-control,
+html[data-theme="dark"] .hangouts-map-page .friends-only-note .form-control,
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-card .form-control,
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-card .form-select {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-search .form-control::placeholder,
+html[data-theme="dark"] .hangouts-map-page .friends-only-note .form-control::placeholder,
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-card .form-control::placeholder {
+  color: var(--text-subtle);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-search .form-control:focus,
+html[data-theme="dark"] .hangouts-map-page .friends-only-note .form-control:focus,
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-card .form-control:focus,
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-card .form-select:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-search .list-group,
+html[data-theme="dark"] .hangouts-map-page .map-search .list-group-item {
+  background: transparent;
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-search .list-group-item {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-search .list-group-item:hover,
+html[data-theme="dark"] .hangouts-map-page .map-search .list-group-item:focus {
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-toggle-icon-btn {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-toggle-icon-btn:hover {
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-toggle-icon-btn img {
+  filter: brightness(0) invert(1);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-recenter-btn,
+html[data-theme="dark"] .hangouts-map-page .hangout-create-btn,
+html[data-theme="dark"] .hangouts-map-page .hangout-join-btn,
+html[data-theme="dark"] .hangouts-map-page .hangout-route-btn {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-recenter-btn:hover,
+html[data-theme="dark"] .hangouts-map-page .map-recenter-btn:focus,
+html[data-theme="dark"] .hangouts-map-page .hangout-create-btn:hover,
+html[data-theme="dark"] .hangouts-map-page .hangout-create-btn:focus,
+html[data-theme="dark"] .hangouts-map-page .hangout-join-btn:hover,
+html[data-theme="dark"] .hangouts-map-page .hangout-join-btn:focus,
+html[data-theme="dark"] .hangouts-map-page .hangout-route-btn:hover,
+html[data-theme="dark"] .hangouts-map-page .hangout-route-btn:focus {
+  background: var(--bg-muted) !important;
+  color: var(--text) !important;
+  border-color: var(--border-strong) !important;
+}
+
+html[data-theme="dark"] .hangouts-map-page .btn-outline-secondary {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .btn-outline-secondary:hover,
+html[data-theme="dark"] .hangouts-map-page .btn-outline-secondary:focus {
+  color: var(--text);
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangout-list-item {
+  background: transparent;
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangout-list-item:hover,
+html[data-theme="dark"] .hangouts-map-page .hangout-list-item:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.26);
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangout-list-item.is-active {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangout-list-title {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangout-list-avatar {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-panel {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0),
+    rgba(8, 12, 18, 0.35) 24%,
+    rgba(8, 12, 18, 0.6)
+  );
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-card,
+html[data-theme="dark"] .hangouts-map-page .map-left-detail .hangouts-detail-card,
+html[data-theme="dark"] .hangouts-map-page .map-joined-detail .hangouts-detail-card {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-title,
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-label,
+html[data-theme="dark"] .hangouts-map-page .attendee-name,
+html[data-theme="dark"] .hangouts-map-page .hangout-request-name {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-header,
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-footer,
+html[data-theme="dark"] .hangouts-map-page .map-left-detail .hangouts-detail-footer,
+html[data-theme="dark"] .hangouts-map-page .map-joined-detail .hangouts-detail-footer {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-inline-error {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-row,
+html[data-theme="dark"] .hangouts-map-page .hangout-request-row {
+  background: transparent;
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-row:hover,
+html[data-theme="dark"] .hangouts-map-page .hangout-request-row:hover {
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-fallback,
+html[data-theme="dark"] .hangouts-map-page .hangout-request-avatar-fallback {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-status-text,
+html[data-theme="dark"] .hangouts-map-page .hangout-request-time {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-status-select {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-status-select:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-more:hover {
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-more img {
+  filter: brightness(0) invert(1);
+  opacity: 0.82;
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-more-menu {
+  background: var(--surface-2);
+  border-color: var(--border);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.34);
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-more-item {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .attendee-more-item:hover,
+html[data-theme="dark"] .hangouts-map-page .attendee-more-item:focus {
+  background: var(--bg-muted);
+}
+
+html[data-theme="dark"] .hangouts-map-page .form-check-input {
+  background-color: var(--bg-muted);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-body .form-switch .form-check-input {
+  --bs-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23ffffff'/%3e%3c/svg%3e");
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangouts-location-toggle .form-switch .form-check-input {
+  --bs-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23ffffff'/%3e%3c/svg%3e");
+}
+
+html[data-theme="dark"] .hangouts-map-page .form-check-input:checked {
+  background-color: var(--text) !important;
+  border-color: var(--text) !important;
+}
+
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-body .form-switch .form-check-input:checked {
+  background-color: var(--surface-2) !important;
+  border-color: var(--border-strong) !important;
+}
+
+html[data-theme="dark"] .hangouts-map-page .form-check-input:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .hangouts-map-page .form-check-label {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .map-loading.badge {
+  background: var(--surface-2) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal-backdrop.show {
+  background: rgba(4, 8, 14, 0.66);
+  z-index: 2100;
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal {
+  z-index: 2110;
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal-content {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.36);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal-header,
+html[data-theme="dark"] .hangouts-map-page .modal-footer {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal-title,
+html[data-theme="dark"] .hangouts-map-page .modal-body .fw-semibold {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal-body,
+html[data-theme="dark"] .hangouts-map-page .modal-body .text-muted {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .form-control,
+html[data-theme="dark"] .hangouts-map-page .modal .form-select {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .form-control:focus,
+html[data-theme="dark"] .hangouts-map-page .modal .form-select:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .MuiOutlinedInput-root {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .MuiOutlinedInput-root .MuiOutlinedInput-notchedOutline {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline {
+  border-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: var(--border-strong);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .MuiInputBase-input {
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .MuiIconButton-root,
+html[data-theme="dark"] .hangouts-map-page .modal .MuiSvgIcon-root {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .text-dark {
+  color: var(--text) !important;
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .form-switch .form-check-input {
+  --bs-form-switch-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23ffffff'/%3e%3c/svg%3e");
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .form-check-input {
+  background-color: var(--bg-muted) !important;
+  border-color: var(--border) !important;
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .form-check-input:checked {
+  background-color: var(--text) !important;
+  border-color: var(--text) !important;
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .form-check-input:focus {
+  border-color: var(--border-strong) !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08) !important;
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .btn-close {
+  filter: invert(1) brightness(0.9);
+}
+
+html[data-theme="dark"] .hangouts-map-page .btn-close {
+  filter: invert(1) brightness(1);
+  opacity: 0.95;
+  border-radius: 999px;
+}
+
+html[data-theme="dark"] .hangouts-map-page .btn-close:hover,
+html[data-theme="dark"] .hangouts-map-page .btn-close:focus {
+  background: var(--bg-muted);
+  opacity: 1;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .btn-danger,
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-card .btn-outline-danger {
+  background: rgba(127, 29, 29, 0.2);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fca5a5;
+}
+
+html[data-theme="dark"] .hangouts-map-page .modal .btn-danger:hover,
+html[data-theme="dark"] .hangouts-map-page .hangouts-detail-card .btn-outline-danger:hover {
+  background: rgba(185, 28, 28, 0.3);
+  border-color: rgba(252, 165, 165, 0.62);
+  color: #fecaca;
+}
+
+html[data-theme="dark"] .hangouts-map-page .shared-location-note,
+html[data-theme="dark"] .hangouts-map-page .location-note-bubble {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+}
+
+html[data-theme="dark"] .hangouts-map-page .shared-location-marker,
+html[data-theme="dark"] .hangouts-map-page .shared-location-avatar,
+html[data-theme="dark"] .hangouts-map-page .friend-location-marker {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+html[data-theme="dark"] .hangouts-map-page .self-location-dot {
+  background: #d1d5db;
+  box-shadow: 0 0 0 6px rgba(229, 231, 235, 0.2);
+}
+
+html[data-theme="dark"] .hangouts-map-page .mapboxgl-popup-content {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="dark"] .hangouts-map-page .mapboxgl-canvas-container,
+html[data-theme="dark"] .hangouts-map-page .mapboxgl-canvas {
+  background: #0b1118;
+  filter: brightness(0.92) saturate(0.92);
+}
+
+html[data-theme="dark"] .hangouts-map-page .mapboxgl-popup-tip {
+  border-top-color: var(--surface);
+  border-bottom-color: var(--surface);
+}
+
+html[data-theme="dark"] .hangouts-map-page .mapboxgl-ctrl-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.24);
+}
+
+html[data-theme="dark"] .hangouts-map-page .mapboxgl-ctrl-group button {
+  background: transparent;
+}
+
+html[data-theme="dark"] .hangouts-map-page .mapboxgl-ctrl-group button span {
+  filter: invert(1) brightness(0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="dark"] .hangouts-map-page .hangouts-detail-panel,
+  html[data-theme="dark"] .hangouts-map-page .hangouts-detail-card,
+  html[data-theme="dark"] .hangouts-map-page .modal,
+  html[data-theme="dark"] .hangouts-map-page .modal-content {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+  }
 }

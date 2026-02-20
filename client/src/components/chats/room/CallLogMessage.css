@@ -67,3 +67,43 @@
   opacity: 0.7;
   cursor: default;
 }
+
+html[data-theme="dark"] .call-log-bubble {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .call-log-subtitle {
+  color: var(--text-muted);
+}
+
+html[data-theme="dark"] .call-log-icon {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .call-log-icon img {
+  filter: brightness(0) invert(1);
+}
+
+html[data-theme="dark"] .call-log-icon.is-missed {
+  border-color: rgba(248, 113, 113, 0.62);
+}
+
+html[data-theme="dark"] .call-log-icon.is-completed {
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .call-log-callback-btn {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .call-log-callback-btn:hover,
+html[data-theme="dark"] .call-log-callback-btn:focus {
+  background: var(--bg-muted);
+  border-color: var(--border-strong);
+  color: var(--text);
+}

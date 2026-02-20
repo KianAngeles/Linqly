@@ -1,8 +1,8 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../../store/AuthContext";
 import { useChatsStore } from "../../store/chatsStore";
-import logoIcon from "../../assets/icons/linqly_logo.png";
 import homeIcon from "../../assets/icons/sidebar-icons/home.png";
 import messengerIcon from "../../assets/icons/sidebar-icons/messenger.png";
 import mapIcon from "../../assets/icons/sidebar-icons/map.png";
@@ -47,6 +47,8 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { unreadChatsCount } = useChatsStore(user?.id);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) === "1";
@@ -79,9 +81,16 @@ export default function Sidebar() {
     };
   }, [unreadChatsCount, user?.username]);
 
-  async function handleLogout() {
-    await logout();
-    navigate("/", { replace: true });
+  async function confirmLogout() {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      navigate("/", { replace: true });
+    } finally {
+      setIsLoggingOut(false);
+      setIsLogoutConfirmOpen(false);
+    }
   }
 
   function toggleSidebar() {
@@ -93,6 +102,62 @@ export default function Sidebar() {
       return next;
     });
   }
+
+  const logoutConfirmModal =
+    isLogoutConfirmOpen && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="app-logout-confirm-overlay"
+            role="presentation"
+            onClick={() => {
+              if (!isLoggingOut) setIsLogoutConfirmOpen(false);
+            }}
+          >
+            <div
+              className="app-logout-confirm-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="sidebar-logout-confirm-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="app-logout-confirm-close"
+                aria-label="Close logout confirmation"
+                onClick={() => setIsLogoutConfirmOpen(false)}
+                disabled={isLoggingOut}
+              >
+                x
+              </button>
+              <div className="app-logout-confirm-title" id="sidebar-logout-confirm-title">
+                Log out?
+              </div>
+              <div className="app-logout-confirm-body">
+                You will need to sign in again to access your account.
+              </div>
+              <div className="app-logout-confirm-actions">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => setIsLogoutConfirmOpen(false)}
+                  disabled={isLoggingOut}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-dark"
+                  onClick={confirmLogout}
+                  disabled={isLoggingOut}
+                >
+                  {isLoggingOut ? "Logging out..." : "Logout"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <aside className={`app-sidebar ${collapsed ? "is-collapsed" : ""}`}>
@@ -115,7 +180,6 @@ export default function Sidebar() {
       </div>
 
       <div className="app-sidebar-brand">
-        <img src={logoIcon} alt="Linqly logo" className="app-sidebar-brand-logo" />
         <div className="app-sidebar-brand-name">Linqly</div>
       </div>
 
@@ -135,7 +199,7 @@ export default function Sidebar() {
           <button
             type="button"
             className="app-nav-link app-sidebar-nav-item app-sidebar-logout"
-            onClick={handleLogout}
+            onClick={() => setIsLogoutConfirmOpen(true)}
             title={collapsed ? "Logout" : undefined}
             aria-label="Logout"
           >
@@ -147,6 +211,7 @@ export default function Sidebar() {
           </button>
         </div>
       </nav>
+      {logoutConfirmModal}
     </aside>
   );
 }
