@@ -311,7 +311,7 @@ export default function Landing() {
                   available in real time, so you always know who's ready to hang out.
                 </p>
                 <ul>
-                  <li>Add friends via username, phone, or QR code</li>
+                  <li>Add friends via username or dispay name</li>
                   <li>See real-time availability status</li>
                   <li>Organize contacts into custom groups</li>
                 </ul>
