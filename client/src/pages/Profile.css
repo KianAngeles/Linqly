@@ -1318,11 +1318,25 @@
 
 @media (max-width: 991px) {
   .profile-actions {
-    flex-direction: column;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .profile-actions > .btn.w-100,
+  .profile-actions > .profile-pending-wrap.w-100 {
+    flex: 1 1 auto;
+    width: auto !important;
+    min-width: 0;
+  }
+
+  .profile-actions > .profile-menu {
+    margin-left: auto;
+    flex: 0 0 auto;
   }
 
   .profile-more-btn {
-    width: 100%;
+    width: 44px;
   }
 }
 

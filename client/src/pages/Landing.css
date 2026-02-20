@@ -1808,20 +1808,10 @@ html[data-theme="dark"] .landing-footer a:focus {
   }
 
   .hero-card-top-left,
-  .hero-card-right {
-    display: none;
-  }
-
-  .hero-card-bottom-left {
-    width: min(92vw, 360px);
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 14%;
-  }
-
+  .hero-card-right,
+  .hero-card-bottom-left,
   .hero-pin-circle {
-    right: 8%;
-    top: 14%;
+    display: none;
   }
 
   .landing-value-grid,

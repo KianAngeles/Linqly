@@ -30,6 +30,10 @@ const MAP_STYLE_LIGHT = "mapbox://styles/mapbox/streets-v12";
 const MAP_STYLE_DARK = "mapbox://styles/mapbox/dark-v11";
 const MAP_DESKTOP_BREAKPOINT = 1200;
 const MAP_MOBILE_BREAKPOINT = 768;
+const MOBILE_SHEET_COLLAPSED_HEIGHT = 72;
+const MOBILE_SHEET_MID_RATIO = 0.45;
+const MOBILE_SHEET_FULL_RATIO = 0.85;
+const MOBILE_SHEET_DRAG_THRESHOLD_PX = 8;
 const CLOSED_HANGOUT_STATUSES = new Set([
   "closed",
   "ended",
@@ -256,10 +260,15 @@ export default function HangoutsMap() {
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const [mobileSheetState, setMobileSheetState] = useState("collapsed");
+  const [mobileSheetDragHeight, setMobileSheetDragHeight] = useState(null);
+  const [isMobileSheetDragging, setIsMobileSheetDragging] = useState(false);
   const leftDrawerRef = useRef(null);
   const rightDrawerRef = useRef(null);
   const mobileSheetRef = useRef(null);
   const mobileControlsSheetRef = useRef(null);
+  const mobileSheetDragStateRef = useRef(null);
+  const mobileSheetDragMovedRef = useRef(false);
+  const suppressSheetHandleClickRef = useRef(false);
 
   const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN || "", []);
   const mapStyleUrl = mapTheme === "dark" ? MAP_STYLE_DARK : MAP_STYLE_LIGHT;
@@ -304,11 +313,21 @@ export default function HangoutsMap() {
       setRightDrawerOpen(false);
       setMobileControlsOpen(false);
       setMobileSheetState("collapsed");
+      setMobileSheetDragHeight(null);
+      setIsMobileSheetDragging(false);
+      mobileSheetDragStateRef.current = null;
+      mobileSheetDragMovedRef.current = false;
+      suppressSheetHandleClickRef.current = false;
       return;
     }
     if (isTabletLayout) {
       setMobileControlsOpen(false);
       setMobileSheetState("collapsed");
+      setMobileSheetDragHeight(null);
+      setIsMobileSheetDragging(false);
+      mobileSheetDragStateRef.current = null;
+      mobileSheetDragMovedRef.current = false;
+      suppressSheetHandleClickRef.current = false;
       return;
     }
     setLeftDrawerOpen(false);
@@ -1758,6 +1777,149 @@ export default function HangoutsMap() {
     });
   }, []);
 
+  const getMobileSheetSnapHeights = useCallback(() => {
+    const viewportHeight =
+      typeof window === "undefined"
+        ? 0
+        : window.visualViewport?.height || window.innerHeight || 0;
+
+    const collapsed = MOBILE_SHEET_COLLAPSED_HEIGHT;
+    if (viewportHeight <= 0) {
+      return {
+        collapsed,
+        mid: collapsed + 180,
+        full: collapsed + 360,
+      };
+    }
+
+    const full = Math.max(collapsed + 120, Math.round(viewportHeight * MOBILE_SHEET_FULL_RATIO));
+    const rawMid = Math.max(collapsed + 80, Math.round(viewportHeight * MOBILE_SHEET_MID_RATIO));
+    const mid = Math.min(rawMid, full - 40);
+
+    return { collapsed, mid, full };
+  }, []);
+
+  const getNearestMobileSheetState = useCallback(
+    (height) => {
+      const { collapsed, mid, full } = getMobileSheetSnapHeights();
+      const candidates = [
+        { state: "collapsed", height: collapsed },
+        { state: "mid", height: mid },
+        { state: "full", height: full },
+      ];
+
+      return candidates.reduce((closest, next) =>
+        Math.abs(next.height - height) < Math.abs(closest.height - height) ? next : closest
+      ).state;
+    },
+    [getMobileSheetSnapHeights]
+  );
+
+  const finishMobileSheetDrag = useCallback(
+    (pointerId) => {
+      const dragState = mobileSheetDragStateRef.current;
+      if (!dragState || dragState.pointerId !== pointerId) return;
+
+      const didDrag = mobileSheetDragMovedRef.current;
+      const currentHeight = mobileSheetRef.current?.getBoundingClientRect().height;
+      const finalHeight =
+        typeof currentHeight === "number" && Number.isFinite(currentHeight)
+          ? currentHeight
+          : dragState.startHeight;
+
+      mobileSheetDragStateRef.current = null;
+      mobileSheetDragMovedRef.current = false;
+      setIsMobileSheetDragging(false);
+      setMobileSheetDragHeight(null);
+
+      if (!didDrag) return;
+
+      suppressSheetHandleClickRef.current = true;
+      setMobileSheetState(getNearestMobileSheetState(finalHeight));
+    },
+    [getNearestMobileSheetState]
+  );
+
+  const handleMobileSheetPointerDown = useCallback(
+    (event) => {
+      if (!isMobileLayout) return;
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+
+      const sheetNode = mobileSheetRef.current;
+      if (!sheetNode) return;
+
+      const startHeight = sheetNode.getBoundingClientRect().height;
+      mobileSheetDragStateRef.current = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startHeight,
+      };
+      mobileSheetDragMovedRef.current = false;
+      setIsMobileSheetDragging(true);
+      setMobileSheetDragHeight(startHeight);
+
+      try {
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      } catch {
+        // no-op
+      }
+    },
+    [isMobileLayout]
+  );
+
+  const handleMobileSheetPointerMove = useCallback(
+    (event) => {
+      const dragState = mobileSheetDragStateRef.current;
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+      const deltaY = event.clientY - dragState.startY;
+      if (!mobileSheetDragMovedRef.current && Math.abs(deltaY) >= MOBILE_SHEET_DRAG_THRESHOLD_PX) {
+        mobileSheetDragMovedRef.current = true;
+      }
+
+      const { collapsed, full } = getMobileSheetSnapHeights();
+      const nextHeight = Math.min(full, Math.max(collapsed, dragState.startHeight - deltaY));
+      setMobileSheetDragHeight(nextHeight);
+    },
+    [getMobileSheetSnapHeights]
+  );
+
+  const handleMobileSheetPointerUp = useCallback(
+    (event) => {
+      finishMobileSheetDrag(event.pointerId);
+      try {
+        if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      } catch {
+        // no-op
+      }
+    },
+    [finishMobileSheetDrag]
+  );
+
+  const handleMobileSheetPointerCancel = useCallback(
+    (event) => {
+      finishMobileSheetDrag(event.pointerId);
+      try {
+        if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+      } catch {
+        // no-op
+      }
+    },
+    [finishMobileSheetDrag]
+  );
+
+  const handleMobileSheetHandleClick = useCallback(() => {
+    if (suppressSheetHandleClickRef.current) {
+      suppressSheetHandleClickRef.current = false;
+      return;
+    }
+    cycleMobileSheetState();
+  }, [cycleMobileSheetState]);
+
   function handleRecenter() {
     if (!userLocation) return;
     setCenter(userLocation);
@@ -2034,13 +2196,20 @@ export default function HangoutsMap() {
             {canRenderPanels && isMobileLayout && (
               <section
                 ref={mobileSheetRef}
-                className={`map-mobile-sheet is-${mobileSheetState} map-overlay`}
+                className={`map-mobile-sheet is-${mobileSheetState}${
+                  isMobileSheetDragging ? " is-dragging" : ""
+                } map-overlay`}
+                style={mobileSheetDragHeight != null ? { height: `${mobileSheetDragHeight}px` } : undefined}
                 aria-label="Hangouts list"
               >
                 <button
                   type="button"
                   className="map-mobile-sheet-handle"
-                  onClick={cycleMobileSheetState}
+                  onClick={handleMobileSheetHandleClick}
+                  onPointerDown={handleMobileSheetPointerDown}
+                  onPointerMove={handleMobileSheetPointerMove}
+                  onPointerUp={handleMobileSheetPointerUp}
+                  onPointerCancel={handleMobileSheetPointerCancel}
                   aria-label="Expand hangouts list"
                 >
                   <span className="map-mobile-sheet-grip" aria-hidden="true" />

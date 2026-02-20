@@ -980,6 +980,10 @@
 }
 
 @media (max-width: 900px) {
+  .home-dashboard {
+    margin: 1rem;
+  }
+
   .home-hero {
     flex-direction: column;
     align-items: flex-start;
@@ -987,6 +991,10 @@
 
   .home-grid {
     grid-template-columns: 1fr;
+  }
+
+  .home-grid > * {
+    grid-column: 1 / -1;
   }
 
   .home-span-2 {
@@ -1003,6 +1011,23 @@
 
   .home-activity-column {
     min-height: 220px;
+  }
+}
+
+@media (max-width: 550px) {
+  .home-hangouts .home-list-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .home-hangouts .home-list-content {
+    width: 100%;
+  }
+
+  .home-hangouts .home-hangout-title {
+    white-space: normal;
+    overflow: visible;
   }
 }
 

@@ -552,6 +552,10 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+.map-mobile-sheet.is-dragging {
+  transition: none;
+}
+
 .map-mobile-sheet.is-collapsed {
   height: 72px;
 }
@@ -574,6 +578,9 @@
   align-content: center;
   gap: 6px;
   padding: 8px 12px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .map-mobile-sheet-grip {
