@@ -174,18 +174,6 @@ async function getFriendIds(me) {
   return out;
 }
 
-async function getAcceptedFriendships(me) {
-  const docs = await Friendship.find({
-    status: "accepted",
-    $or: [{ requesterId: me }, { receiverId: me }],
-  }).select("requesterId receiverId createdAt updatedAt");
-
-  return docs.map((d) => ({
-    userId: String(d.requesterId) === String(me) ? d.receiverId : d.requesterId,
-    acceptedAt: d.updatedAt || d.createdAt,
-  }));
-}
-
 function parseStartsEnds({ startsAt, endsAt, durationMinutes }) {
   const start = startsAt ? new Date(startsAt) : new Date();
   if (Number.isNaN(start.getTime())) return { error: "Invalid startsAt" };
@@ -309,17 +297,7 @@ router.get("/feed", authRequired, async (req, res) => {
     return res.status(400).json({ message: "Valid lng/lat required" });
   }
 
-  const acceptedFriendships = await getAcceptedFriendships(me);
-  const friendIds = acceptedFriendships.map((entry) => entry.userId);
-  const friendAcceptedAtMsById = new Map(
-    acceptedFriendships
-      .map((entry) => {
-        const acceptedAtMs = new Date(entry.acceptedAt || 0).getTime();
-        if (!Number.isFinite(acceptedAtMs)) return null;
-        return [String(entry.userId), acceptedAtMs];
-      })
-      .filter(Boolean)
-  );
+  const friendIds = await getFriendIds(me);
   const now = new Date();
   const query = {
     endsAt: { $gt: now },
@@ -337,20 +315,7 @@ router.get("/feed", authRequired, async (req, res) => {
     .populate("attendeeIds", "username displayName avatarUrl")
     .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
 
-  const filteredDocs = docs.filter((doc) => {
-    const creatorId = String(doc?.creatorId?._id || doc?.creatorId || "");
-    if (creatorId === String(me)) return true;
-
-    if (friendAcceptedAtMsById.has(creatorId)) {
-      const createdAtMs = new Date(doc?.createdAt || 0).getTime();
-      const acceptedAtMs = friendAcceptedAtMsById.get(creatorId);
-      return Number.isFinite(createdAtMs) && createdAtMs >= acceptedAtMs;
-    }
-
-    return String(doc?.visibility || "") === "public";
-  });
-
-  filteredDocs.sort((a, b) => {
+  docs.sort((a, b) => {
     const aStart = new Date(a.startsAt).getTime();
     const bStart = new Date(b.startsAt).getTime();
     if (aStart !== bStart) return aStart - bStart;
@@ -358,7 +323,7 @@ router.get("/feed", authRequired, async (req, res) => {
   });
 
   res.json({
-    hangouts: filteredDocs.map((doc) => toHangoutSummary(doc, { viewerId: me })),
+    hangouts: docs.map((doc) => toHangoutSummary(doc, { viewerId: me })),
   });
 });
 

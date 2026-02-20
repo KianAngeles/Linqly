@@ -607,10 +607,11 @@ export default function Friends() {
               </div>
               <button
                 type="button"
-                className="btn btn-sm btn-link"
+                className="friends-modal-close-x"
+                aria-label="Close"
                 onClick={() => setConfirmUnfriend(null)}
               >
-                Close
+                x
               </button>
             </div>
             <div className="friends-modal-body">
