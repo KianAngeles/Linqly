@@ -68,6 +68,7 @@ app.use(
 );
 
 // Routes
+app.get("/", (req, res) => res.send("Linqly API is running ✅"));
 app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);
 app.use("/friends", friendsRoutes);
