@@ -1,6 +1,16 @@
 import { authFetch } from "./http";
 const API = import.meta.env.VITE_API_URL;
 
+async function parseJsonSafe(response) {
+  const raw = await response.text();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { message: "Unexpected server response" };
+  }
+}
+
 export const messagesApi = {
   async list(accessToken, chatId, cursor) {
     const url = new URL(`${API}/messages`);
@@ -12,7 +22,7 @@ export const messagesApi = {
       credentials: "include",
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to load messages");
     return data;
   },
@@ -29,7 +39,7 @@ export const messagesApi = {
       body: JSON.stringify({ chatId, text, replyTo }),
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (import.meta.env.DEV) {
       const elapsed = Math.round(performance.now() - start);
       console.debug("[chat] send text", { chatId, elapsedMs: elapsed, ok: r.ok });
@@ -51,7 +61,7 @@ export const messagesApi = {
       body: form,
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to upload image");
     return data;
   },
@@ -69,7 +79,7 @@ export const messagesApi = {
       body: form,
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to upload file");
     return data;
   },
@@ -87,7 +97,7 @@ export const messagesApi = {
       body: form,
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to upload voice");
     return data;
   },
@@ -104,7 +114,7 @@ export const messagesApi = {
       body: JSON.stringify({ emoji }),
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to react");
     return data; // { ok: true, reactions: [...] }
   },
@@ -119,7 +129,7 @@ export const messagesApi = {
       credentials: "include",
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to unreact");
     return data;
   },
@@ -131,7 +141,7 @@ export const messagesApi = {
       credentials: "include",
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to delete message");
     return data;
   },
@@ -147,7 +157,7 @@ export const messagesApi = {
       body: JSON.stringify({ chatId, text }),
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to send system message");
     return data;
   },
@@ -163,7 +173,7 @@ export const messagesApi = {
       body: JSON.stringify({ chatId, callType, callStatus, durationSec }),
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to send call log");
     return data;
   },
@@ -174,7 +184,7 @@ export const messagesApi = {
       credentials: "include",
     });
     if (!r.ok) {
-      const data = await r.json().catch(() => ({}));
+      const data = await parseJsonSafe(r);
       throw new Error(data.message || "Failed to download file");
     }
     return r.blob();
@@ -191,7 +201,7 @@ export const messagesApi = {
       credentials: "include",
     });
 
-    const data = await r.json();
+    const data = await parseJsonSafe(r);
     if (!r.ok) throw new Error(data.message || "Failed to load attachments");
     return data;
   },

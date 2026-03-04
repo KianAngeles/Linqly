@@ -17,6 +17,14 @@ export function AuthProvider({ children }) {
   const [mutedChatIds, setMutedChatIds] = useState(new Set());
   const joinedChatIdsRef = useRef(new Set());
 
+  function ensureSocketOnline(userId) {
+    if (!userId) return;
+    if (!socket.connected) {
+      socket.connect();
+    }
+    socket.emit("auth:online", userId);
+  }
+
   async function refreshChatSettings(tokenOverride) {
     const token = tokenOverride || accessToken;
     if (!token) return;
@@ -53,6 +61,7 @@ export function AuthProvider({ children }) {
     setAccessToken(r.accessToken);
     const me = await authApi.me(r.accessToken);
     setUser(me.user);
+    ensureSocketOnline(me?.user?.id);
     await refreshChatSettings(r.accessToken);
     return r.accessToken;
   }
@@ -128,6 +137,7 @@ export function AuthProvider({ children }) {
     const r = await authApi.login({ email, password });
     setAccessToken(r.accessToken);
     setUser(r.user);
+    ensureSocketOnline(r?.user?.id);
     await refreshChatSettings(r.accessToken);
   }
 
@@ -141,6 +151,7 @@ export function AuthProvider({ children }) {
     });
     setAccessToken(r.accessToken);
     setUser(r.user);
+    ensureSocketOnline(r?.user?.id);
     await refreshChatSettings(r.accessToken);
   }
 
