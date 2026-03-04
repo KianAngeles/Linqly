@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { decryptText, encryptText } = require("../utils/messageCrypto");
 
 const messageRequestSchema = new mongoose.Schema(
   {
@@ -35,7 +36,67 @@ const messageRequestSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+function encryptRequestDocFields(doc) {
+  if (!doc) return;
+  if (typeof doc.lastMessageText === "string") {
+    doc.lastMessageText = encryptText(doc.lastMessageText);
+  }
+}
+
+function decryptRequestDocFields(doc) {
+  if (!doc) return;
+  if (typeof doc.lastMessageText === "string") {
+    doc.lastMessageText = decryptText(doc.lastMessageText);
+  }
+}
+
+function encryptRequestUpdate(update) {
+  if (!update || Array.isArray(update)) return update;
+
+  if (typeof update.lastMessageText === "string") {
+    update.lastMessageText = encryptText(update.lastMessageText);
+  }
+
+  if (update.$set && typeof update.$set === "object") {
+    if (typeof update.$set.lastMessageText === "string") {
+      update.$set.lastMessageText = encryptText(update.$set.lastMessageText);
+    }
+  }
+
+  if (update.$setOnInsert && typeof update.$setOnInsert === "object") {
+    if (typeof update.$setOnInsert.lastMessageText === "string") {
+      update.$setOnInsert.lastMessageText = encryptText(update.$setOnInsert.lastMessageText);
+    }
+  }
+
+  return update;
+}
+
 messageRequestSchema.index({ toUserId: 1, status: 1, lastMessageAt: -1 });
 messageRequestSchema.index({ fromUserId: 1, status: 1, updatedAt: -1 });
+
+messageRequestSchema.pre("save", function onPreSave(next) {
+  encryptRequestDocFields(this);
+  next();
+});
+
+messageRequestSchema.post("init", function onInit(doc) {
+  decryptRequestDocFields(doc);
+});
+
+messageRequestSchema.post("save", function onSave(doc, next) {
+  decryptRequestDocFields(doc);
+  next();
+});
+
+["updateOne", "updateMany", "findOneAndUpdate"].forEach((hook) => {
+  messageRequestSchema.pre(hook, function onUpdate(next) {
+    const update = this.getUpdate();
+    if (update) {
+      this.setUpdate(encryptRequestUpdate(update));
+    }
+    next();
+  });
+});
 
 module.exports = mongoose.model("MessageRequest", messageRequestSchema);

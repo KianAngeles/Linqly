@@ -2,6 +2,7 @@ const Friendship = require("../models/Friendship");
 const Message = require("../models/Message");
 const MessageRequest = require("../models/MessageRequest");
 const { makePairKey } = require("./pairKey");
+const { decryptText } = require("./messageCrypto");
 
 const MAX_PENDING_REQUEST_MESSAGES = 1;
 
@@ -17,13 +18,13 @@ function getOtherMemberId(chat, userId) {
 }
 
 function getLastMessagePreview({ messageType, messageText, fallbackText = "" }) {
-  const text = String(messageText || "").trim();
+  const text = decryptText(messageText).trim();
   if (text) return text;
   if (messageType === "image") return "[Image]";
   if (messageType === "video") return "[Video]";
   if (messageType === "file") return "[File]";
   if (messageType === "audio") return "[Voice]";
-  return String(fallbackText || "").trim();
+  return decryptText(fallbackText).trim();
 }
 
 async function getFriendshipForPair(userA, userB) {

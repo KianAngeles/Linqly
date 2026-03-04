@@ -189,13 +189,13 @@ router.get("/attachments", authRequired, async (req, res) => {
     return res.json({ items });
   }
 
+  // Text is encrypted at rest, so extract links after decrypting fetched docs.
   const docs = await Message.find({
     chatId,
     type: "text",
-    text: { $regex: /https?:\/\//i },
   })
     .sort({ createdAt: -1 })
-    .limit(200)
+    .limit(400)
     .populate("senderId", "username avatarUrl")
     .select("text createdAt senderId");
 

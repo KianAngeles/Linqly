@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { decryptText, encryptText } = require("../utils/messageCrypto");
 
 const ongoingCallSchema = new mongoose.Schema(
   {
@@ -91,9 +92,69 @@ const chatSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+function encryptChatDocFields(doc) {
+  if (!doc) return;
+  if (typeof doc.lastMessageText === "string") {
+    doc.lastMessageText = encryptText(doc.lastMessageText);
+  }
+}
+
+function decryptChatDocFields(doc) {
+  if (!doc) return;
+  if (typeof doc.lastMessageText === "string") {
+    doc.lastMessageText = decryptText(doc.lastMessageText);
+  }
+}
+
+function encryptChatUpdate(update) {
+  if (!update || Array.isArray(update)) return update;
+
+  if (typeof update.lastMessageText === "string") {
+    update.lastMessageText = encryptText(update.lastMessageText);
+  }
+
+  if (update.$set && typeof update.$set === "object") {
+    if (typeof update.$set.lastMessageText === "string") {
+      update.$set.lastMessageText = encryptText(update.$set.lastMessageText);
+    }
+  }
+
+  if (update.$setOnInsert && typeof update.$setOnInsert === "object") {
+    if (typeof update.$setOnInsert.lastMessageText === "string") {
+      update.$setOnInsert.lastMessageText = encryptText(update.$setOnInsert.lastMessageText);
+    }
+  }
+
+  return update;
+}
+
 // Helpful indexes
 chatSchema.index({ members: 1 });
 chatSchema.index({ type: 1, lastMessageAt: -1 });
 chatSchema.index({ "ongoingCall.callId": 1 });
+
+chatSchema.pre("save", function onPreSave(next) {
+  encryptChatDocFields(this);
+  next();
+});
+
+chatSchema.post("init", function onInit(doc) {
+  decryptChatDocFields(doc);
+});
+
+chatSchema.post("save", function onSave(doc, next) {
+  decryptChatDocFields(doc);
+  next();
+});
+
+["updateOne", "updateMany", "findOneAndUpdate"].forEach((hook) => {
+  chatSchema.pre(hook, function onUpdate(next) {
+    const update = this.getUpdate();
+    if (update) {
+      this.setUpdate(encryptChatUpdate(update));
+    }
+    next();
+  });
+});
 
 module.exports = mongoose.model("Chat", chatSchema);
