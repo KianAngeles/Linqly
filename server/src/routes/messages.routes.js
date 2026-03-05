@@ -100,10 +100,19 @@ function emitToUser(userId, event, payload) {
   sockets.forEach((socketId) => io.to(socketId).emit(event, payload));
 }
 
+function getMemberId(member) {
+  return String(member?._id || member || "");
+}
+
+function isChatMember(chat, userId) {
+  const me = String(userId || "");
+  return (chat?.members || []).some((member) => getMemberId(member) === me);
+}
+
 async function resolveHistoryAccess({ chatId, userId }) {
   const chat = await Chat.findById(chatId).select("members");
   if (!chat) return { chat: null, isMember: false, historyUntil: null };
-  const isMember = chat.members.some((m) => String(m) === String(userId));
+  const isMember = isChatMember(chat, userId);
   if (isMember) return { chat, isMember: true, historyUntil: null };
   const setting = await ChatSetting.findOne({ chatId, userId }).select("removedAt");
   if (setting?.removedAt) {
@@ -337,9 +346,7 @@ router.post("/", authRequired, async (req, res) => {
     .select("members type");
   if (!chat) return res.status(404).json({ message: "Chat not found" });
 
-  const isMember = chat.members.some(
-    (m) => String(m._id || m) === String(me)
-  );
+  const isMember = isChatMember(chat, me);
   if (!isMember)
     return res.status(403).json({ message: "Not a member of this chat" });
   const canView = await canViewChatMessages({ chatId, viewerId: me });
@@ -379,12 +386,13 @@ router.post("/", authRequired, async (req, res) => {
 
   const mentions = [];
   if (cleanText) {
-    const memberMap = new Map(
-      (chat.members || []).map((m) => [
-        String(m.username || "").toLowerCase(),
-        { userId: m._id, username: m.username },
-      ])
-    );
+    const memberMap = new Map();
+    (chat.members || []).forEach((member) => {
+      const userId = member?._id || null;
+      const username = String(member?.username || "").trim();
+      if (!userId || !username) return;
+      memberMap.set(username.toLowerCase(), { userId, username });
+    });
 
     const seen = new Set();
     const re = /@([a-zA-Z0-9_]+)/g;
@@ -498,9 +506,7 @@ router.post("/system", authRequired, async (req, res) => {
   const chat = await Chat.findById(chatId).select("members");
   if (!chat) return res.status(404).json({ message: "Chat not found" });
 
-  const isMember = chat.members.some(
-    (m) => String(m._id || m) === String(me)
-  );
+  const isMember = isChatMember(chat, me);
   if (!isMember)
     return res.status(403).json({ message: "Not a member of this chat" });
 
@@ -568,7 +574,7 @@ router.post("/call-log", authRequired, async (req, res) => {
     return res.status(400).json({ message: "Call logs are only supported for direct chats" });
   }
 
-  const isMember = chat.members.some((m) => String(m._id || m) === String(me));
+  const isMember = isChatMember(chat, me);
   if (!isMember) return res.status(403).json({ message: "Not a member of this chat" });
   const canView = await canViewChatMessages({ chatId, viewerId: me });
   if (!canView) return res.status(404).json({ message: "Chat not found" });
@@ -650,9 +656,7 @@ router.post("/image", authRequired, (req, res) => {
       .select("members type");
     if (!chat) return res.status(404).json({ message: "Chat not found" });
 
-  const isMember = chat.members.some(
-    (m) => String(m._id || m) === String(me)
-  );
+  const isMember = isChatMember(chat, me);
   if (!isMember)
     return res.status(403).json({ message: "Not a member of this chat" });
   const policy = await resolveDirectMessagePolicy({ chat, senderId: me });
@@ -805,9 +809,7 @@ router.post("/file", authRequired, (req, res) => {
       .select("members type");
     if (!chat) return res.status(404).json({ message: "Chat not found" });
 
-    const isMember = chat.members.some(
-      (m) => String(m._id || m) === String(me)
-    );
+    const isMember = isChatMember(chat, me);
     if (!isMember)
       return res.status(403).json({ message: "Not a member of this chat" });
     const policy = await resolveDirectMessagePolicy({ chat, senderId: me });
@@ -969,9 +971,7 @@ router.post("/voice", authRequired, (req, res) => {
       .select("members type");
     if (!chat) return res.status(404).json({ message: "Chat not found" });
 
-    const isMember = chat.members.some(
-      (m) => String(m._id || m) === String(me)
-    );
+    const isMember = isChatMember(chat, me);
     if (!isMember)
       return res.status(403).json({ message: "Not a member of this chat" });
     const policy = await resolveDirectMessagePolicy({ chat, senderId: me });
@@ -1127,7 +1127,7 @@ router.post("/:id/react", authRequired, async (req, res) => {
   const chat = await Chat.findById(msg.chatId).select("members");
   if (!chat) return res.status(404).json({ message: "Chat not found" });
 
-  const isMember = chat.members.some((m) => String(m) === String(me));
+  const isMember = isChatMember(chat, me);
   if (!isMember) return res.status(403).json({ message: "Not a member of this chat" });
 
   await Message.updateOne(
@@ -1266,7 +1266,7 @@ router.post("/:id/unreact", authRequired, async (req, res) => {
   const chat = await Chat.findById(msg.chatId).select("members");
   if (!chat) return res.status(404).json({ message: "Chat not found" });
 
-  const isMember = chat.members.some((m) => String(m) === String(me));
+  const isMember = isChatMember(chat, me);
   if (!isMember) return res.status(403).json({ message: "Not a member of this chat" });
 
   const updated = await Message.findByIdAndUpdate(
