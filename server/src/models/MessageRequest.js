@@ -75,27 +75,24 @@ function encryptRequestUpdate(update) {
 messageRequestSchema.index({ toUserId: 1, status: 1, lastMessageAt: -1 });
 messageRequestSchema.index({ fromUserId: 1, status: 1, updatedAt: -1 });
 
-messageRequestSchema.pre("save", function onPreSave(next) {
+messageRequestSchema.pre("save", function onPreSave() {
   encryptRequestDocFields(this);
-  next();
 });
 
 messageRequestSchema.post("init", function onInit(doc) {
   decryptRequestDocFields(doc);
 });
 
-messageRequestSchema.post("save", function onSave(doc, next) {
+messageRequestSchema.post("save", function onSave(doc) {
   decryptRequestDocFields(doc);
-  next();
 });
 
 ["updateOne", "updateMany", "findOneAndUpdate"].forEach((hook) => {
-  messageRequestSchema.pre(hook, function onUpdate(next) {
+  messageRequestSchema.pre(hook, function onUpdate() {
     const update = this.getUpdate();
     if (update) {
       this.setUpdate(encryptRequestUpdate(update));
     }
-    next();
   });
 });
 

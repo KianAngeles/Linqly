@@ -59,6 +59,29 @@ export default function useChatSocketEvents({
   }, [selectedChatId, setChats, setGroupSettings]);
 
   useEffect(() => {
+    const onEmojiUpdate = (payload) => {
+      if (!payload?.chatId) return;
+      const nextEmoji =
+        String(payload.defaultSendEmoji || "").trim() || "👍";
+      setChats((prev) =>
+        prev.map((c) =>
+          String(c._id) === String(payload.chatId)
+            ? { ...c, defaultSendEmoji: nextEmoji }
+            : c
+        )
+      );
+      if (String(selectedChatId) === String(payload.chatId)) {
+        setGroupSettings((prev) =>
+          prev ? { ...prev, defaultSendEmoji: nextEmoji } : prev
+        );
+      }
+    };
+
+    socket.on("chat:emoji", onEmojiUpdate);
+    return () => socket.off("chat:emoji", onEmojiUpdate);
+  }, [selectedChatId, setChats, setGroupSettings]);
+
+  useEffect(() => {
     const onJoinRequest = (payload) => {
       if (!payload?.chatId || !payload?.request) return;
       if (String(payload.chatId) !== String(selectedChatId)) return;

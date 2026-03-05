@@ -29,7 +29,9 @@ export default function useGroupManagement({
         setGroupSettings(data.chat);
         setGroupNameDraft(data.chat?.name || "");
       })
-      .catch(() => {});
+      .catch(() => {
+        setGroupSettings(null);
+      });
   }, [accessToken, selectedChatId, selectedChatType]);
 
   const addMemberToGroup = useCallback(

@@ -76,6 +76,7 @@ const chatSchema = new mongoose.Schema(
     requireAdminApproval: { type: Boolean, default: false },
     allowAnyoneCall: { type: Boolean, default: true },
     nicknames: { type: Map, of: String, default: {} },
+    defaultSendEmoji: { type: String, default: "👍" },
     ongoingCall: { type: ongoingCallSchema, default: null },
 
     // For direct chat uniqueness: makePairKey(userA, userB)
@@ -133,27 +134,24 @@ chatSchema.index({ members: 1 });
 chatSchema.index({ type: 1, lastMessageAt: -1 });
 chatSchema.index({ "ongoingCall.callId": 1 });
 
-chatSchema.pre("save", function onPreSave(next) {
+chatSchema.pre("save", function onPreSave() {
   encryptChatDocFields(this);
-  next();
 });
 
 chatSchema.post("init", function onInit(doc) {
   decryptChatDocFields(doc);
 });
 
-chatSchema.post("save", function onSave(doc, next) {
+chatSchema.post("save", function onSave(doc) {
   decryptChatDocFields(doc);
-  next();
 });
 
 ["updateOne", "updateMany", "findOneAndUpdate"].forEach((hook) => {
-  chatSchema.pre(hook, function onUpdate(next) {
+  chatSchema.pre(hook, function onUpdate() {
     const update = this.getUpdate();
     if (update) {
       this.setUpdate(encryptChatUpdate(update));
     }
-    next();
   });
 });
 

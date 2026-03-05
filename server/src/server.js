@@ -403,9 +403,36 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("chat:join", ({ chatId }) => {
-    if (!chatId) return;
-    socket.join(String(chatId));
+  socket.on("chat:join", async (payload, ack) => {
+    const reply = typeof ack === "function" ? ack : () => {};
+    const chatId = String(payload?.chatId || "");
+    const userId = String(socket.data.userId || "");
+    if (!chatId || !mongoose.isValidObjectId(chatId) || !userId) {
+      reply({ ok: false, message: "Invalid join payload" });
+      return;
+    }
+
+    try {
+      const chat = await Chat.findById(chatId).select("members");
+      if (!chat) {
+        socket.leave(chatId);
+        reply({ ok: false, message: "Chat not found" });
+        return;
+      }
+      const isMember = (chat.members || []).some(
+        (memberId) => String(memberId) === userId
+      );
+      if (!isMember) {
+        socket.leave(chatId);
+        reply({ ok: false, message: "Not a member" });
+        return;
+      }
+      socket.join(chatId);
+      reply({ ok: true });
+    } catch (err) {
+      console.error("chat:join failed", err);
+      reply({ ok: false, message: "Failed to join chat" });
+    }
   });
 
   socket.on("hangout:join", ({ hangoutId }) => {

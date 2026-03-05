@@ -654,6 +654,42 @@ html[data-theme="dark"] .uc-mini-input {
   box-shadow: 0 14px 26px rgba(15, 23, 42, 0.22);
 }
 
+.uc-mini-avatar-shell {
+  position: relative;
+  width: 52px;
+  height: 52px;
+}
+
+.uc-mini-avatar-close {
+  position: absolute;
+  top: -1px;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.9);
+  color: #ffffff;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.2);
+}
+
+.uc-mini-avatar-close:hover {
+  background: #111827;
+}
+
+html[data-theme="dark"] .uc-mini-avatar-close {
+  background: rgba(0, 0, 0, 0.78);
+  color: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+}
+
 .uc-mini.is-minimized .uc-mini-avatar {
   width: 52px;
   height: 52px;

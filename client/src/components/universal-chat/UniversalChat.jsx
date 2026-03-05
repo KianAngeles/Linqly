@@ -62,18 +62,26 @@ function MiniChatWindow({
   const [hiddenMessageIds, setHiddenMessageIds] = useState(new Set());
   const [stickToBottom, setStickToBottom] = useState(true);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const listRef = useRef(null);
   const pendingQueueRef = useRef([]);
   const pendingUrlsRef = useRef(new Map());
   const lastCallRef = useRef(0);
+  const nextCursorRef = useRef(null);
+  const loadingOlderRef = useRef(false);
 
   useEffect(() => {
     if (!accessToken || !chatId) return;
+    setIsLoadingOlder(false);
+    nextCursorRef.current = null;
+    loadingOlderRef.current = false;
     messagesApi
       .list(accessToken, chatId)
       .then((data) => {
         const ordered = [...(data.messages || [])].reverse();
         setMessages(ordered);
+        const cursor = data?.nextCursor || null;
+        nextCursorRef.current = cursor;
       })
       .catch(() => {});
   }, [accessToken, chatId]);
@@ -176,11 +184,55 @@ function MiniChatWindow({
     el.scrollTop = el.scrollHeight;
   }, [messages, isMinimized, stickToBottom]);
 
+  const loadOlderMessages = async () => {
+    const cursor = nextCursorRef.current;
+    if (!accessToken || !chatId || !cursor) return;
+    if (loadingOlderRef.current) return;
+
+    const el = listRef.current;
+    const prevHeight = el?.scrollHeight || 0;
+    const prevTop = el?.scrollTop || 0;
+
+    loadingOlderRef.current = true;
+    setIsLoadingOlder(true);
+    try {
+      const data = await messagesApi.list(accessToken, chatId, cursor);
+      const older = [...(data.messages || [])].reverse();
+      const next = data?.nextCursor || null;
+      nextCursorRef.current = next;
+
+      if (older.length > 0) {
+        setMessages((prev) => {
+          const existing = new Set(prev.map((m) => String(m.id || m._id)));
+          const dedupedOlder = older.filter(
+            (m) => !existing.has(String(m.id || m._id))
+          );
+          return dedupedOlder.length > 0 ? [...dedupedOlder, ...prev] : prev;
+        });
+
+        requestAnimationFrame(() => {
+          const node = listRef.current;
+          if (!node) return;
+          const delta = node.scrollHeight - prevHeight;
+          node.scrollTop = prevTop + delta;
+        });
+      }
+    } catch {
+      // ignore
+    } finally {
+      loadingOlderRef.current = false;
+      setIsLoadingOlder(false);
+    }
+  };
+
   const handleListScroll = () => {
     const el = listRef.current;
     if (!el) return;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     setStickToBottom(distance < 24);
+    if (el.scrollTop <= 24 && nextCursorRef.current && !loadingOlderRef.current) {
+      loadOlderMessages();
+    }
   };
 
   const handleSend = async (e) => {
@@ -468,15 +520,29 @@ function MiniChatWindow({
       style={expandedStyle}
     >
       {isMinimized ? (
-        <button type="button" className="uc-mini-avatar-only" onClick={onMinimize}>
-          {avatarUrl ? (
-            <img src={avatarUrl} alt={title} className="uc-mini-avatar" />
-          ) : (
-            <div className="uc-mini-avatar uc-mini-fallback">
-              {String(title || "?").charAt(0).toUpperCase()}
-            </div>
-          )}
-        </button>
+        <div className="uc-mini-avatar-shell">
+          <button type="button" className="uc-mini-avatar-only" onClick={onMinimize}>
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={title} className="uc-mini-avatar" />
+            ) : (
+              <div className="uc-mini-avatar uc-mini-fallback">
+                {String(title || "?").charAt(0).toUpperCase()}
+              </div>
+            )}
+          </button>
+          <button
+            type="button"
+            className="uc-mini-avatar-close"
+            title="Close"
+            aria-label="Close mini chat"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+          >
+            x
+          </button>
+        </div>
       ) : (
         <>
           <div className="uc-mini-header">
@@ -517,6 +583,9 @@ function MiniChatWindow({
             </div>
           </div>
           <div className="uc-mini-body" ref={listRef} onScroll={handleListScroll}>
+            {isLoadingOlder && (
+              <div className="small text-muted px-2 py-1">Loading older messages...</div>
+            )}
             {visibleMessages.length === 0 ? (
               <div className="chat-empty-intro">
                 {avatarUrl ? (

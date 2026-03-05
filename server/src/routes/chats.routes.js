@@ -77,6 +77,41 @@ function emitToUser(userId, event, payload = {}) {
   });
 }
 
+async function clearRemovedHistoryState(chatId, userId) {
+  if (!chatId || !userId) return;
+  await ChatSetting.updateOne(
+    { chatId, userId },
+    {
+      $set: {
+        removedAt: null,
+        removedLastMessageAt: null,
+        removedLastMessageText: "",
+        removedLastMessageId: null,
+        removedLastMessageSenderId: null,
+      },
+      $unset: {
+        hiddenAt: "",
+      },
+    }
+  );
+}
+
+function forceUserLeaveChatRoom(chatId, userId) {
+  if (!chatId || !userId) return;
+  const io = getIO();
+  if (!io) return;
+  const roomId = String(chatId);
+  const socketIds = onlineUsers.get(String(userId));
+  if (!socketIds || socketIds.size === 0) return;
+  socketIds.forEach((socketId) => {
+    const sock = io.sockets.sockets.get(String(socketId));
+    if (sock) {
+      sock.leave(roomId);
+    }
+  });
+  emitToUser(userId, "chat:removed", { chatId: roomId });
+}
+
 function getGroupApproverIds(chat) {
   const out = new Set();
   if (chat?.creatorId) out.add(String(chat.creatorId));
@@ -254,6 +289,7 @@ router.post("/:chatId/leave", authRequired, async (req, res) => {
   }
 
   chat.members = chat.members.filter((id) => String(id) !== String(me));
+  forceUserLeaveChatRoom(chatId, me);
 
   // remove personal settings for this chat
   await ChatSetting.deleteOne({ chatId, userId: me });
@@ -418,6 +454,7 @@ router.post("/:chatId/members", authRequired, async (req, res) => {
       },
     }
   );
+  await clearRemovedHistoryState(chatId, userId);
 
   const adder = await User.findById(me).select("username");
   const added = await User.findById(userId).select("username");
@@ -481,7 +518,7 @@ router.get("/:chatId", authRequired, async (req, res) => {
     .populate("creatorId", "username avatarUrl")
     .populate("pendingJoinRequests.userId", "username avatarUrl")
     .select(
-      "type name avatarUrl creatorId admins members pendingJoinRequests nicknames requireAdminApproval allowAnyoneCall ongoingCall"
+      "type name avatarUrl creatorId admins members pendingJoinRequests nicknames defaultSendEmoji requireAdminApproval allowAnyoneCall ongoingCall"
     );
 
   if (!chat) return res.status(404).json({ message: "Chat not found" });
@@ -501,6 +538,7 @@ router.get("/:chatId", authRequired, async (req, res) => {
         chat.nicknames && typeof chat.nicknames.get === "function"
           ? Object.fromEntries(chat.nicknames)
           : chat.nicknames || {},
+      defaultSendEmoji: String(chat.defaultSendEmoji || "").trim() || "👍",
       creator: chat.creatorId
         ? {
             id: chat.creatorId._id,
@@ -607,11 +645,18 @@ router.get("/:chatId/reads", authRequired, async (req, res) => {
   });
 });
 
-// PATCH /chats/:chatId/group { name? }
+// PATCH /chats/:chatId/group { name?, defaultSendEmoji? }
 router.patch("/:chatId/group", authRequired, async (req, res) => {
   const me = req.user.userId;
   const { chatId } = req.params;
-  const { name, nicknameUserId, nickname, requireAdminApproval, allowAnyoneCall } =
+  const {
+    name,
+    nicknameUserId,
+    nickname,
+    requireAdminApproval,
+    allowAnyoneCall,
+    defaultSendEmoji,
+  } =
     req.body || {};
 
   if (!mongoose.isValidObjectId(chatId)) {
@@ -619,7 +664,7 @@ router.patch("/:chatId/group", authRequired, async (req, res) => {
   }
 
   const chat = await Chat.findById(chatId).select(
-    "type members creatorId admins hangoutId name nicknames requireAdminApproval allowAnyoneCall"
+    "type members creatorId admins hangoutId name nicknames defaultSendEmoji requireAdminApproval allowAnyoneCall"
   );
   if (!chat) return res.status(404).json({ message: "Chat not found" });
   if (!["group", "hangout", "direct"].includes(chat.type)) {
@@ -644,6 +689,8 @@ router.patch("/:chatId/group", authRequired, async (req, res) => {
   let nextNickname = "";
   let nicknameTargetId = "";
   let nextNicknamesMap = null;
+  let emojiChanged = false;
+  let nextDefaultSendEmoji = "";
   if (typeof name === "string") {
     const clean = name.trim();
     const maxLen = chat.type === "hangout" ? 60 : 50;
@@ -717,6 +764,22 @@ router.patch("/:chatId/group", authRequired, async (req, res) => {
     }
     update.allowAnyoneCall = allowAnyoneCall;
   }
+  if (defaultSendEmoji !== undefined) {
+    if (typeof defaultSendEmoji !== "string") {
+      return res.status(400).json({ message: "defaultSendEmoji must be a string" });
+    }
+    const cleanEmoji = defaultSendEmoji.trim();
+    if (!cleanEmoji) {
+      return res.status(400).json({ message: "defaultSendEmoji required" });
+    }
+    if (cleanEmoji.length > 16) {
+      return res.status(400).json({ message: "defaultSendEmoji too long" });
+    }
+    const currentEmoji = String(chat.defaultSendEmoji || "").trim() || "👍";
+    update.defaultSendEmoji = cleanEmoji;
+    emojiChanged = cleanEmoji !== currentEmoji;
+    nextDefaultSendEmoji = cleanEmoji;
+  }
 
   const updateOps = { $set: update };
   if (Object.keys(unset).length > 0) {
@@ -745,6 +808,18 @@ router.patch("/:chatId/group", authRequired, async (req, res) => {
       io.to(String(chatId)).emit("chat:nicknames", {
         chatId,
         nicknames: nextNicknamesMap,
+      });
+    }
+  }
+  if (emojiChanged && nextDefaultSendEmoji) {
+    const senderUser = await User.findById(me).select("username");
+    const text = `${senderUser?.username || "Someone"} changed the emoji to ${nextDefaultSendEmoji}`;
+    await emitSystemMessage(chatId, me, text);
+    const io = getIO();
+    if (io) {
+      io.to(String(chatId)).emit("chat:emoji", {
+        chatId,
+        defaultSendEmoji: nextDefaultSendEmoji,
       });
     }
   }
@@ -841,7 +916,9 @@ router.post("/:chatId/members/:userId/remove", authRequired, async (req, res) =>
     return res.status(400).json({ message: "Invalid userId" });
   }
 
-  const chat = await Chat.findById(chatId).select("type members creatorId admins hangoutId");
+  const chat = await Chat.findById(chatId).select(
+    "type members creatorId admins hangoutId lastMessageAt lastMessageText lastMessageId lastMessageSenderId"
+  );
   if (!chat) return res.status(404).json({ message: "Chat not found" });
   if (!["group", "hangout"].includes(chat.type)) {
     return res.status(400).json({ message: "Not a group chat" });
@@ -868,13 +945,28 @@ router.post("/:chatId/members/:userId/remove", authRequired, async (req, res) =>
     { _id: chatId },
     { $pull: { members: userId, admins: userId } }
   );
+  forceUserLeaveChatRoom(chatId, userId);
+  const removedAt = new Date();
+  await ChatSetting.findOneAndUpdate(
+    { chatId, userId },
+    {
+      $set: {
+        hiddenAt: null,
+        removedAt,
+        removedLastMessageAt: chat.lastMessageAt || null,
+        removedLastMessageText: chat.lastMessageText || "",
+        removedLastMessageId: chat.lastMessageId || null,
+        removedLastMessageSenderId: chat.lastMessageSenderId || null,
+      },
+    },
+    { upsert: true }
+  );
 
   if (chat.type === "hangout") {
     await Hangout.updateOne(
       { _id: chat.hangoutId },
       { $pull: { attendeeIds: userId, sharedLocations: { userId } } }
     );
-    await ChatSetting.deleteOne({ chatId, userId });
   }
 
   const remover = await User.findById(me).select("username");
@@ -1036,6 +1128,7 @@ router.post("/:chatId/join-request", authRequired, async (req, res) => {
         $pull: { pendingJoinRequests: { userId: me } },
       }
     );
+    await clearRemovedHistoryState(chatId, me);
     const joiner = await User.findById(me).select("username");
     const text = `${joiner?.username || "Someone"} joined the chat`;
     await emitSystemMessage(chatId, me, text);
@@ -1123,6 +1216,7 @@ router.post("/:chatId/join-request/:userId/approve", authRequired, async (req, r
       ],
     }
   );
+  await clearRemovedHistoryState(chatId, userId);
   emitJoinRequestResolved(chatId, userId);
 
   const added = await User.findById(userId).select("username");
@@ -1223,12 +1317,19 @@ router.post("/:chatId/join-request/:userId/reject", authRequired, async (req, re
  */
 router.get("/", authRequired, async (req, res) => {
   const me = req.user.userId;
-
-  const chats = await Chat.find({ members: me })
+  const allSettingsDocs = await ChatSetting.find({ userId: me }).select(
+    "chatId isPinned isMuted isIgnored hiddenAt removedAt removedLastMessageAt removedLastMessageText removedLastMessageId removedLastMessageSenderId"
+  );
+  const removedChatIds = allSettingsDocs
+    .filter((s) => Boolean(s.removedAt))
+    .map((s) => s.chatId);
+  const chats = await Chat.find({
+    $or: [{ members: me }, { _id: { $in: removedChatIds } }],
+  })
     .sort({ lastMessageAt: -1, updatedAt: -1 })
     .populate("members", "username email avatarUrl")
     .select(
-      "_id type members name avatarUrl nicknames creatorId admins allowAnyoneCall ongoingCall lastMessageAt lastMessageText lastMessageId lastMessageSenderId createdAt updatedAt"
+      "_id type members name avatarUrl nicknames defaultSendEmoji creatorId admins allowAnyoneCall ongoingCall lastMessageAt lastMessageText lastMessageId lastMessageSenderId createdAt updatedAt"
     );
 
   const chatIds = chats.map((c) => c._id);
@@ -1239,12 +1340,7 @@ router.get("/", authRequired, async (req, res) => {
     chatId: { $in: chatIds },
   }).select("chatId lastReadMessageId readAt");
 
-  const settingsDocs = await ChatSetting.find({
-    userId: me,
-    chatId: { $in: chatIds },
-  }).select("chatId isPinned isMuted isIgnored hiddenAt");
-
-  const settingsMap = new Map(settingsDocs.map((s) => [String(s.chatId), s]));
+  const settingsMap = new Map(allSettingsDocs.map((s) => [String(s.chatId), s]));
   const readMap = new Map(readDocs.map((r) => [String(r.chatId), r]));
   const directPairKeys = chats
     .filter((c) => c.type === "direct")
@@ -1265,12 +1361,28 @@ router.get("/", authRequired, async (req, res) => {
     .map((c) => {
       const s = settingsMap.get(String(c._id));
       const read = readMap.get(String(c._id));
+      const isMember = (c.members || []).some((m) => String(m._id || m) === String(me));
+      const isHistoryOnly = !isMember && Boolean(s?.removedAt);
+      if (!isMember && !isHistoryOnly) return null;
       const settings = {
         isPinned: s?.isPinned || false,
         isMuted: s?.isMuted || false,
         isIgnored: s?.isIgnored || false,
         hiddenAt: s?.hiddenAt || null,
+        removedAt: s?.removedAt || null,
       };
+      const lastMessageAt = isHistoryOnly
+        ? s?.removedLastMessageAt || null
+        : c.lastMessageAt || null;
+      const lastMessageText = isHistoryOnly
+        ? s?.removedLastMessageText || ""
+        : c.lastMessageText || "";
+      const lastMessageId = isHistoryOnly
+        ? s?.removedLastMessageId || null
+        : c.lastMessageId || null;
+      const lastMessageSenderId = isHistoryOnly
+        ? s?.removedLastMessageSenderId || null
+        : c.lastMessageSenderId || null;
       const readInfo = {
         lastReadMessageId: read?.lastReadMessageId || null,
         lastReadAt: read?.readAt || null,
@@ -1318,9 +1430,15 @@ router.get("/", authRequired, async (req, res) => {
           requestStatus === "declined_outgoing";
         return {
         ...c.toObject(),
+        lastMessageAt,
+        lastMessageText,
+        lastMessageId,
+        lastMessageSenderId,
         displayName,
         nicknames,
+        defaultSendEmoji: String(c.defaultSendEmoji || "").trim() || "👍",
         avatarUrl: null,
+        historyOnly: isHistoryOnly,
         friendStatus,
         requestId: requestDoc?._id || null,
         requestStatus,
@@ -1359,17 +1477,25 @@ router.get("/", authRequired, async (req, res) => {
       );
       const canStartGroupCall =
         c.type === "group" || c.type === "hangout"
-          ? GROUP_CALLS_ENABLED && (c.allowAnyoneCall !== false || isGroupCreator || isGroupAdmin)
+          ? !isHistoryOnly &&
+            GROUP_CALLS_ENABLED &&
+            (c.allowAnyoneCall !== false || isGroupCreator || isGroupAdmin)
           : true;
 
       return {
         ...c.toObject(),
+        lastMessageAt,
+        lastMessageText,
+        lastMessageId,
+        lastMessageSenderId,
         displayName,
         nicknames,
+        defaultSendEmoji: String(c.defaultSendEmoji || "").trim() || "👍",
         requestStatus: "accepted",
+        historyOnly: isHistoryOnly,
         messagingCaps: {
-          typing: true,
-          readReceipts: true,
+          typing: !isHistoryOnly,
+          readReceipts: !isHistoryOnly,
           calls: canStartGroupCall,
         },
         avatarUrl:
@@ -1450,7 +1576,14 @@ router.post("/:chatId/delete", authRequired, async (req, res) => {
   if (!chat) return res.status(404).json({ message: "Chat not found" });
 
   const isMember = chat.members.some((id) => String(id) === String(me));
-  if (!isMember) return res.status(403).json({ message: "Not a member" });
+  if (!isMember) {
+    const historySetting = await ChatSetting.findOne({
+      chatId,
+      userId: me,
+      removedAt: { $ne: null },
+    }).select("_id");
+    if (!historySetting) return res.status(403).json({ message: "Not a member" });
+  }
 
   await ChatSetting.findOneAndUpdate(
     { chatId, userId: me },

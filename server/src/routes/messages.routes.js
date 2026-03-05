@@ -100,6 +100,18 @@ function emitToUser(userId, event, payload) {
   sockets.forEach((socketId) => io.to(socketId).emit(event, payload));
 }
 
+async function resolveHistoryAccess({ chatId, userId }) {
+  const chat = await Chat.findById(chatId).select("members");
+  if (!chat) return { chat: null, isMember: false, historyUntil: null };
+  const isMember = chat.members.some((m) => String(m) === String(userId));
+  if (isMember) return { chat, isMember: true, historyUntil: null };
+  const setting = await ChatSetting.findOne({ chatId, userId }).select("removedAt");
+  if (setting?.removedAt) {
+    return { chat, isMember: false, historyUntil: setting.removedAt };
+  }
+  return { chat, isMember: false, historyUntil: null };
+}
+
 async function canViewChatMessages({ chatId, viewerId }) {
   const requestDoc = await MessageRequest.findOne({ chatId }).select("status toUserId");
   if (!requestDoc) return true;
@@ -126,12 +138,17 @@ router.get("/attachments", authRequired, async (req, res) => {
     return res.status(400).json({ message: "Invalid chatId" });
   }
 
-  const chat = await Chat.findById(chatId).select("members");
-  if (!chat) return res.status(404).json({ message: "Chat not found" });
-  const isMember = chat.members.some((m) => String(m) === String(me));
-  if (!isMember) return res.status(403).json({ message: "Not a member" });
+  const access = await resolveHistoryAccess({ chatId, userId: me });
+  if (!access.chat) return res.status(404).json({ message: "Chat not found" });
+  if (!access.isMember && !access.historyUntil) {
+    return res.status(403).json({ message: "Not a member" });
+  }
   const canView = await canViewChatMessages({ chatId, viewerId: me });
   if (!canView) return res.status(404).json({ message: "Chat not found" });
+  const historyFilter =
+    !access.isMember && access.historyUntil
+      ? { createdAt: { $lte: access.historyUntil } }
+      : {};
 
   if (!["media", "files", "links"].includes(kind)) {
     return res.status(400).json({ message: "Invalid kind" });
@@ -141,6 +158,7 @@ router.get("/attachments", authRequired, async (req, res) => {
     const docs = await Message.find({
       chatId,
       type: { $in: ["image", "video"] },
+      ...historyFilter,
     })
       .sort({ createdAt: -1 })
       .limit(limit)
@@ -166,6 +184,7 @@ router.get("/attachments", authRequired, async (req, res) => {
     const docs = await Message.find({
       chatId,
       type: "file",
+      ...historyFilter,
     })
       .sort({ createdAt: -1 })
       .limit(limit)
@@ -193,6 +212,7 @@ router.get("/attachments", authRequired, async (req, res) => {
   const docs = await Message.find({
     chatId,
     type: "text",
+    ...historyFilter,
   })
     .sort({ createdAt: -1 })
     .limit(400)
@@ -235,23 +255,26 @@ router.get("/", authRequired, async (req, res) => {
   if (!mongoose.isValidObjectId(chatId))
     return res.status(400).json({ message: "Invalid chatId" });
 
-  const chat = await Chat.findById(chatId)
-    .populate("members", "username")
-    .select("members");
-  if (!chat) return res.status(404).json({ message: "Chat not found" });
-
-  const isMember = chat.members.some(
-    (m) => String(m._id || m) === String(me)
-  );
-  if (!isMember)
+  const access = await resolveHistoryAccess({ chatId, userId: me });
+  if (!access.chat) return res.status(404).json({ message: "Chat not found" });
+  if (!access.isMember && !access.historyUntil) {
     return res.status(403).json({ message: "Not a member of this chat" });
+  }
 
   const limit = 30;
   const query = { chatId };
+  if (!access.isMember && access.historyUntil) {
+    query.createdAt = { $lte: access.historyUntil };
+  }
 
   if (cursor) {
     const dt = new Date(cursor);
-    if (!isNaN(dt.getTime())) query.createdAt = { $lt: dt };
+    if (!isNaN(dt.getTime())) {
+      query.createdAt = {
+        ...(query.createdAt || {}),
+        $lt: dt,
+      };
+    }
   }
 
   const messages = await Message.find(query)
@@ -298,7 +321,7 @@ router.get("/", authRequired, async (req, res) => {
 router.post("/", authRequired, async (req, res) => {
   const t0 = Date.now();
   const me = req.user.userId;
-  const { chatId, text, replyTo } = req.body; // ✅ include replyTo
+  const { chatId, text, replyTo } = req.body || {};
 
   if (!chatId) return res.status(400).json({ message: "chatId required" });
   if (!mongoose.isValidObjectId(chatId))
@@ -461,7 +484,7 @@ router.post("/", authRequired, async (req, res) => {
  */
 router.post("/system", authRequired, async (req, res) => {
   const me = req.user.userId;
-  const { chatId, text } = req.body;
+  const { chatId, text } = req.body || {};
 
   if (!chatId) return res.status(400).json({ message: "chatId required" });
   if (!mongoose.isValidObjectId(chatId))
@@ -1088,13 +1111,17 @@ router.post("/voice", authRequired, (req, res) => {
 router.post("/:id/react", authRequired, async (req, res) => {
   const me = req.user.userId;
   const { id } = req.params;
-  const { emoji } = req.body;
+  const { emoji } = req.body || {};
 
   if (!mongoose.isValidObjectId(id)) return res.status(400).json({ message: "Invalid message id" });
-  if (!emoji || typeof emoji !== "string") return res.status(400).json({ message: "emoji required" });
-  if (emoji.length > 8) return res.status(400).json({ message: "emoji too long" });
+  if (!me || !mongoose.isValidObjectId(me)) {
+    return res.status(401).json({ message: "Invalid or expired access token" });
+  }
+  const cleanEmoji = String(emoji || "").trim();
+  if (!cleanEmoji) return res.status(400).json({ message: "emoji required" });
+  if (cleanEmoji.length > 8) return res.status(400).json({ message: "emoji too long" });
 
-  const msg = await Message.findById(id).select("chatId reactions");
+  const msg = await Message.findById(id).select("chatId");
   if (!msg) return res.status(404).json({ message: "Message not found" });
 
   const chat = await Chat.findById(msg.chatId).select("members");
@@ -1103,20 +1130,27 @@ router.post("/:id/react", authRequired, async (req, res) => {
   const isMember = chat.members.some((m) => String(m) === String(me));
   if (!isMember) return res.status(403).json({ message: "Not a member of this chat" });
 
-  msg.reactions = (msg.reactions || []).filter((r) => String(r.userId) !== String(me));
-  msg.reactions.push({ emoji, userId: me });
-  await msg.save();
+  await Message.updateOne(
+    { _id: id },
+    { $pull: { reactions: { userId: me } } }
+  );
+  const updated = await Message.findByIdAndUpdate(
+    id,
+    { $push: { reactions: { emoji: cleanEmoji, userId: me } } },
+    { new: true }
+  ).select("chatId reactions");
+  if (!updated) return res.status(404).json({ message: "Message not found" });
 
   const io = getIO();
   if (io) {
-    io.to(String(msg.chatId)).emit("message:reaction", {
-      messageId: String(msg._id),
-      chatId: String(msg.chatId),
-      reactions: msg.reactions,
+    io.to(String(updated.chatId)).emit("message:reaction", {
+      messageId: String(updated._id),
+      chatId: String(updated.chatId),
+      reactions: updated.reactions,
     });
   }
 
-  res.json({ ok: true, reactions: msg.reactions });
+  res.json({ ok: true, reactions: updated.reactions });
 });
 
 // GET /messages/:id/download
@@ -1169,7 +1203,7 @@ async function getFileMessageForUser(req, res) {
   }
 
   const msg = await Message.findById(id).select(
-    "chatId type fileUrl fileName fileType"
+    "chatId type fileUrl fileName fileType createdAt"
   );
   if (!msg) {
     res.status(404).json({ message: "Message not found" });
@@ -1184,16 +1218,27 @@ async function getFileMessageForUser(req, res) {
     return null;
   }
 
-  const chat = await Chat.findById(msg.chatId).select("members");
-  if (!chat) {
+  const access = await resolveHistoryAccess({ chatId: msg.chatId, userId: me });
+  if (!access.chat) {
     res.status(404).json({ message: "Chat not found" });
     return null;
   }
 
-  const isMember = chat.members.some((m) => String(m) === String(me));
-  if (!isMember) {
+  if (!access.isMember && !access.historyUntil) {
     res.status(403).json({ message: "Not a member" });
     return null;
+  }
+  if (!access.isMember && access.historyUntil) {
+    const createdAt = new Date(msg.createdAt || 0).getTime();
+    const cutoff = new Date(access.historyUntil).getTime();
+    if (
+      !Number.isNaN(createdAt) &&
+      !Number.isNaN(cutoff) &&
+      createdAt > cutoff
+    ) {
+      res.status(403).json({ message: "Not allowed" });
+      return null;
+    }
   }
 
   return msg;
@@ -1211,8 +1256,11 @@ router.post("/:id/unreact", authRequired, async (req, res) => {
   const { id } = req.params;
 
   if (!mongoose.isValidObjectId(id)) return res.status(400).json({ message: "Invalid message id" });
+  if (!me || !mongoose.isValidObjectId(me)) {
+    return res.status(401).json({ message: "Invalid or expired access token" });
+  }
 
-  const msg = await Message.findById(id).select("chatId reactions");
+  const msg = await Message.findById(id).select("chatId");
   if (!msg) return res.status(404).json({ message: "Message not found" });
 
   const chat = await Chat.findById(msg.chatId).select("members");
@@ -1221,19 +1269,23 @@ router.post("/:id/unreact", authRequired, async (req, res) => {
   const isMember = chat.members.some((m) => String(m) === String(me));
   if (!isMember) return res.status(403).json({ message: "Not a member of this chat" });
 
-  msg.reactions = (msg.reactions || []).filter((r) => String(r.userId) !== String(me));
-  await msg.save();
+  const updated = await Message.findByIdAndUpdate(
+    id,
+    { $pull: { reactions: { userId: me } } },
+    { new: true }
+  ).select("chatId reactions");
+  if (!updated) return res.status(404).json({ message: "Message not found" });
 
   const io = getIO();
   if (io) {
-    io.to(String(msg.chatId)).emit("message:reaction", {
-      messageId: String(msg._id),
-      chatId: String(msg.chatId),
-      reactions: msg.reactions,
+    io.to(String(updated.chatId)).emit("message:reaction", {
+      messageId: String(updated._id),
+      chatId: String(updated.chatId),
+      reactions: updated.reactions,
     });
   }
 
-  res.json({ ok: true, reactions: msg.reactions });
+  res.json({ ok: true, reactions: updated.reactions });
 });
 
 // DELETE /messages/:id (unsend)

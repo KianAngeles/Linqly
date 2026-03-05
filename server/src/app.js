@@ -78,6 +78,17 @@ app.use("/chats", chatsRoutes);
 app.use("/messages", messagesRoutes);
 app.use("/hangouts", hangoutsRoutes);
 
+app.use((err, req, res, next) => {
+  console.error(err);
+  if (res.headersSent) return next(err);
+  const rawMessage = String(err?.message || "").trim();
+  const isCorsError = /cors/i.test(rawMessage);
+  const status = Number(err?.status || err?.statusCode) || (isCorsError ? 403 : 500);
+  return res.status(status).json({
+    message: rawMessage || "Internal server error",
+  });
+});
+
 
 
 module.exports = app;

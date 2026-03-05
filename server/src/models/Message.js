@@ -90,27 +90,24 @@ function encryptMessageUpdate(update) {
 // Cursor/pagination index
 messageSchema.index({ chatId: 1, createdAt: -1 });
 
-messageSchema.pre("save", function onPreSave(next) {
+messageSchema.pre("save", function onPreSave() {
   encryptMessageDocFields(this);
-  next();
 });
 
 messageSchema.post("init", function onInit(doc) {
   decryptMessageDocFields(doc);
 });
 
-messageSchema.post("save", function onSave(doc, next) {
+messageSchema.post("save", function onSave(doc) {
   decryptMessageDocFields(doc);
-  next();
 });
 
 ["updateOne", "updateMany", "findOneAndUpdate"].forEach((hook) => {
-  messageSchema.pre(hook, function onUpdate(next) {
+  messageSchema.pre(hook, function onUpdate() {
     const update = this.getUpdate();
     if (update) {
       this.setUpdate(encryptMessageUpdate(update));
     }
-    next();
   });
 });
 

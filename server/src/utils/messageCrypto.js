@@ -7,6 +7,7 @@ const KEY_BYTES = 32;
 
 let cachedKey = undefined;
 let warnedMissingKey = false;
+let warnedInvalidKey = false;
 
 function normalizeKey(rawValue) {
   const value = String(rawValue || "").trim();
@@ -39,7 +40,17 @@ function getKey() {
     cachedKey = null;
     return cachedKey;
   }
-  cachedKey = normalizeKey(raw);
+  try {
+    cachedKey = normalizeKey(raw);
+  } catch (err) {
+    if (!warnedInvalidKey) {
+      console.error(
+        `[message-crypto] ${err.message}. Message encryption will be disabled.`
+      );
+      warnedInvalidKey = true;
+    }
+    cachedKey = null;
+  }
   return cachedKey;
 }
 

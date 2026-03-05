@@ -243,6 +243,10 @@ export default function ChatsPanel() {
     () => chats.find((c) => String(c._id) === String(selectedChatId)),
     [chats, selectedChatId]
   );
+  useEffect(() => {
+    const nextEmoji = String(selectedChat?.defaultSendEmoji || "").trim() || "👍";
+    setDefaultSendEmoji(nextEmoji);
+  }, [selectedChatId, selectedChat?.defaultSendEmoji]);
   const selectedIncomingRequest = useMemo(
     () =>
       (messageRequests || []).find(
@@ -256,6 +260,7 @@ export default function ChatsPanel() {
   const isDeclinedOutgoingRequest = selectedRequestStatus === "declined_outgoing";
   const isRequestLockedThread =
     isIncomingRequestThread || isPendingOutgoingRequest || isDeclinedOutgoingRequest;
+  const isHistoryOnlyChat = Boolean(selectedChat?.historyOnly);
   const {
     chatSettings,
     setChatSettings,
@@ -1388,14 +1393,25 @@ export default function ChatsPanel() {
         </div>
         <EmojiPicker
           onEmojiClick={async (emojiData) => {
-            const nextEmoji = emojiData.emoji;
-            setDefaultSendEmoji(nextEmoji);
+            const nextEmoji = String(emojiData?.emoji || "").trim();
+            if (!nextEmoji) return;
             setShowEmojiModal(false);
             if (!accessToken || !selectedChatId) return;
-            const actor = user?.username || "Someone";
-            const notice = `${actor} changed the emoji to ${nextEmoji}`;
             try {
-              await messagesApi.sendSystem(accessToken, selectedChatId, notice);
+              await chatsApi.updateGroup(accessToken, selectedChatId, {
+                defaultSendEmoji: nextEmoji,
+              });
+              setDefaultSendEmoji(nextEmoji);
+              setChats((prev) =>
+                prev.map((c) =>
+                  String(c._id) === String(selectedChatId)
+                    ? { ...c, defaultSendEmoji: nextEmoji }
+                    : c
+                )
+              );
+              setGroupSettings((prev) =>
+                prev ? { ...prev, defaultSendEmoji: nextEmoji } : prev
+              );
             } catch (e) {
               setErr(e.message);
             }
@@ -3184,6 +3200,11 @@ export default function ChatsPanel() {
                   You've been blocked by this user.
                 </div>
               ) : null}
+              {isHistoryOnlyChat ? (
+                <div className="alert alert-secondary py-2 chat-blocked-banner">
+                  You were removed from this chat. You can read past messages only.
+                </div>
+              ) : null}
             </>
           }
           composer={
@@ -3207,7 +3228,7 @@ export default function ChatsPanel() {
               onSendImage={sendImage}
               onSendVoice={sendVoice}
               defaultSendEmoji={defaultSendEmoji}
-              disabled={isBlocked || isRequestLockedThread}
+              disabled={isBlocked || isRequestLockedThread || isHistoryOnlyChat}
             />
           }
         />

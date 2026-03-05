@@ -51,6 +51,10 @@ PORT=5000
 MONGODB_URI=your_mongodb_connection_string
 CLIENT_ORIGIN=http://localhost:5173
 
+# Optional: message-at-rest encryption (32-byte key, base64 or 64-char hex)
+# Example (base64): openssl rand -base64 32
+MESSAGE_ENCRYPTION_KEY=
+
 JWT_ACCESS_SECRET=your_access_secret
 JWT_REFRESH_SECRET=your_refresh_secret
 ACCESS_TOKEN_EXPIRES_IN=15m
@@ -90,3 +94,11 @@ npm run dev
 Client default: `http://localhost:5173`  
 Server default: `http://localhost:5000`
 
+## Optional: Encrypt Existing Message Data
+
+After setting `MESSAGE_ENCRYPTION_KEY`, you can encrypt existing plaintext message fields in MongoDB:
+
+```bash
+cd server
+node tmp/encryptExistingMessageData.js
+```
