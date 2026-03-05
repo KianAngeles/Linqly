@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../store/AuthContext";
 import { chatsApi } from "../../api/chats.api";
 import { friendsApi } from "../../api/friends.api";
@@ -11,6 +11,7 @@ import useReadReceipts, { resolveSeenByMessage } from "../../hooks/chats/useRead
 import { loadChatSettings } from "../../utils/chatSettings";
 import MessageItem from "../chats/room/MessageItem";
 import MessageReactions from "../chats/room/MessageReactions";
+import ChatNotice from "../chats/ChatNotice";
 import ReplyPreviewBar from "../chats/ReplyPreviewBar";
 import MessageComposer from "../chats/MessageComposer";
 import reactIcon from "../../assets/icons/react.png";
@@ -51,6 +52,7 @@ function MiniChatWindow({
   isClosing,
   onMinimize,
   onClose,
+  historyOnly = false,
 }) {
   const navigate = useNavigate();
   const { startCall, isInCall } = useCall();
@@ -63,6 +65,7 @@ function MiniChatWindow({
   const [stickToBottom, setStickToBottom] = useState(true);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [isHistoryOnly, setIsHistoryOnly] = useState(Boolean(historyOnly));
   const listRef = useRef(null);
   const pendingQueueRef = useRef([]);
   const pendingUrlsRef = useRef(new Map());
@@ -70,21 +73,29 @@ function MiniChatWindow({
   const nextCursorRef = useRef(null);
   const loadingOlderRef = useRef(false);
 
+  const loadWindowMessages = useCallback(async () => {
+    if (!accessToken || !chatId) return;
+    try {
+      const data = await messagesApi.list(accessToken, chatId);
+      const ordered = [...(data.messages || [])].reverse();
+      setMessages(ordered);
+      nextCursorRef.current = data?.nextCursor || null;
+    } catch {
+      // ignore
+    }
+  }, [accessToken, chatId]);
+
   useEffect(() => {
     if (!accessToken || !chatId) return;
     setIsLoadingOlder(false);
     nextCursorRef.current = null;
     loadingOlderRef.current = false;
-    messagesApi
-      .list(accessToken, chatId)
-      .then((data) => {
-        const ordered = [...(data.messages || [])].reverse();
-        setMessages(ordered);
-        const cursor = data?.nextCursor || null;
-        nextCursorRef.current = cursor;
-      })
-      .catch(() => {});
-  }, [accessToken, chatId]);
+    loadWindowMessages();
+  }, [accessToken, chatId, loadWindowMessages]);
+
+  useEffect(() => {
+    setIsHistoryOnly(Boolean(historyOnly));
+  }, [historyOnly]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -122,6 +133,34 @@ function MiniChatWindow({
     socket.on("message:new", onNew);
     return () => socket.off("message:new", onNew);
   }, [chatId]);
+
+  useEffect(() => {
+    if (!accessToken || !chatId) return undefined;
+
+    const handleChatRemoved = (payload) => {
+      if (String(payload?.chatId || "") !== String(chatId)) return;
+      setIsHistoryOnly(true);
+    };
+
+    const handleNotificationRefresh = (payload) => {
+      const type = String(payload?.type || "");
+      const refreshedChatId = String(payload?.chatId || "");
+      if (type !== "group_added_you" || refreshedChatId !== String(chatId)) return;
+      setIsHistoryOnly(false);
+      socket.emit("chat:join", { chatId: refreshedChatId }, (reply) => {
+        if (!reply?.ok) return;
+        loadWindowMessages();
+      });
+    };
+
+    socket.on("chat:removed", handleChatRemoved);
+    socket.on("notifications:refresh", handleNotificationRefresh);
+
+    return () => {
+      socket.off("chat:removed", handleChatRemoved);
+      socket.off("notifications:refresh", handleNotificationRefresh);
+    };
+  }, [accessToken, chatId, loadWindowMessages]);
 
   useEffect(() => {
     const onReaction = (payload) => {
@@ -237,6 +276,7 @@ function MiniChatWindow({
 
   const handleSend = async (e) => {
     e.preventDefault();
+    if (isHistoryOnly) return;
     const clean = String(text || "").trim();
     if (!clean) return;
     setText("");
@@ -268,6 +308,7 @@ function MiniChatWindow({
   };
 
   const handleSendQuick = async (value) => {
+    if (isHistoryOnly) return;
     const clean = String(value || "").trim();
     if (!clean) return;
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -301,6 +342,7 @@ function MiniChatWindow({
   };
 
   const handleSendImage = async (file) => {
+    if (isHistoryOnly) return;
     if (!file) return;
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const previewUrl = URL.createObjectURL(file);
@@ -344,6 +386,7 @@ function MiniChatWindow({
   };
 
   const handleSendVoice = async (file) => {
+    if (isHistoryOnly) return;
     if (!file) return;
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const previewUrl = URL.createObjectURL(file);
@@ -829,6 +872,11 @@ function MiniChatWindow({
             onClose={() => setReplyingTo(null)}
           />
           <div className="uc-mini-input">
+            {isHistoryOnly ? (
+              <ChatNotice tone="muted" className="chat-blocked-banner">
+                You were removed from this chat. You can read past messages only.
+              </ChatNotice>
+            ) : null}
             <MessageComposer
               text={text}
               onChangeText={setText}
@@ -850,6 +898,7 @@ function MiniChatWindow({
               onSendVoice={handleSendVoice}
               placeholder="Aa"
               hideMicWhenTyping
+              disabled={isHistoryOnly}
             />
           </div>
         </>
@@ -880,6 +929,68 @@ export default function UniversalChat() {
       .catch(() => {});
   }, [accessToken]);
 
+  useEffect(() => {
+    if (!accessToken) return undefined;
+
+    const handleChatRemoved = (payload) => {
+      const removedChatId = String(payload?.chatId || "");
+      if (!removedChatId) return;
+      setChats((prev) =>
+        prev.map((chat) =>
+          String(chat._id) === removedChatId
+            ? {
+                ...chat,
+                historyOnly: true,
+              }
+            : chat
+        )
+      );
+      setOpenChats((prev) =>
+        prev.map((chat) =>
+          String(chat.chatId) === removedChatId
+            ? {
+                ...chat,
+                historyOnly: true,
+              }
+            : chat
+        )
+      );
+    };
+
+    const handleNotificationRefresh = (payload) => {
+      const eventType = String(payload?.type || "");
+      const refreshedChatId = String(payload?.chatId || "");
+      if (eventType !== "group_added_you" || !refreshedChatId) return;
+      setChats((prev) =>
+        prev.map((chat) =>
+          String(chat._id) === refreshedChatId
+            ? {
+                ...chat,
+                historyOnly: false,
+              }
+            : chat
+        )
+      );
+      setOpenChats((prev) =>
+        prev.map((chat) =>
+          String(chat.chatId) === refreshedChatId
+            ? {
+                ...chat,
+                historyOnly: false,
+              }
+            : chat
+        )
+      );
+    };
+
+    socket.on("chat:removed", handleChatRemoved);
+    socket.on("notifications:refresh", handleNotificationRefresh);
+    return () => {
+      socket.off("chat:removed", handleChatRemoved);
+      socket.off("notifications:refresh", handleNotificationRefresh);
+    };
+  }, [accessToken, setChats]);
+
   const filteredChats = useMemo(() => {
     const q = String(search || "").trim().toLowerCase();
     if (!q) return chats;
@@ -906,7 +1017,16 @@ export default function UniversalChat() {
     setOpenChats((prev) => {
       const existing = prev.find((c) => String(c.chatId) === String(chat._id));
       const nextChat = existing
-        ? { ...existing, isMinimized: false }
+        ? {
+            ...existing,
+            title: chat.displayName || existing.title || "Chat",
+            avatarUrl:
+              chat.type === "direct"
+                ? resolveAvatarUrl(chat.otherUser?.avatarUrl || "")
+                : resolveAvatarUrl(chat.avatarUrl || ""),
+            isMinimized: false,
+            historyOnly: Boolean(chat.historyOnly),
+          }
         : {
             chatId: String(chat._id),
             title: chat.displayName || "Chat",
@@ -919,6 +1039,7 @@ export default function UniversalChat() {
             peerName: peerUser?.username || peerUser?.displayName || "",
             peerAvatar: resolveAvatarUrl(peerUser?.avatarUrl || ""),
             isMinimized: false,
+            historyOnly: Boolean(chat.historyOnly),
           };
 
       const withoutExisting = prev.filter((c) => String(c.chatId) !== String(chat._id));
@@ -1090,6 +1211,7 @@ export default function UniversalChat() {
             peerId={c.peerId}
             peerName={c.peerName}
             peerAvatar={c.peerAvatar}
+            historyOnly={c.historyOnly}
             accessToken={accessToken}
             user={user}
             isMinimized={c.isMinimized}

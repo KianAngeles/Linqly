@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import EmojiPicker from "emoji-picker-react";
+import ChatNotice from "./ChatNotice";
+
+const NOTICE_AUTO_HIDE_MS = 5000;
 
 export default function MessageComposer({
   text,
@@ -130,6 +133,22 @@ export default function MessageComposer({
   useEffect(() => {
     adjustTextarea();
   }, [text, pendingFiles.length]);
+
+  useEffect(() => {
+    if (!fileError) return undefined;
+    const timer = window.setTimeout(() => {
+      setFileError("");
+    }, NOTICE_AUTO_HIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [fileError]);
+
+  useEffect(() => {
+    if (!recordingError) return undefined;
+    const timer = window.setTimeout(() => {
+      setRecordingError("");
+    }, NOTICE_AUTO_HIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [recordingError]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -362,7 +381,13 @@ export default function MessageComposer({
         {(isRecording || recordedBlobUrl || recordingError) && (
           <div className="chat-voice-panel">
             {recordingError && (
-              <div className="chat-voice-error">{recordingError}</div>
+              <ChatNotice
+                tone="danger"
+                className="chat-notice--compact chat-voice-error"
+                role="alert"
+              >
+                {recordingError}
+              </ChatNotice>
             )}
             {isRecording && (
               <div className="chat-voice-bar is-recording">
@@ -479,9 +504,13 @@ export default function MessageComposer({
                   disabled={disabled}
                 />
                 {fileError && (
-                  <div className="chat-input-file-error" role="alert">
+                  <ChatNotice
+                    tone="danger"
+                    className="chat-notice--compact chat-input-file-error"
+                    role="alert"
+                  >
                     {fileError}
-                  </div>
+                  </ChatNotice>
                 )}
               </div>
               {showMentions && mentionCandidates.length > 0 && (

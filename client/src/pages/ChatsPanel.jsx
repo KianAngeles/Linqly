@@ -27,6 +27,7 @@ import { GROUP_CALLS_ENABLED } from "../constants/featureFlags";
 import ChatsSidebar from "../components/chats/ChatsSidebar";
 import ChatRoom from "../components/chats/ChatRoom";
 import MessageComposer from "../components/chats/MessageComposer";
+import ChatNotice from "../components/chats/ChatNotice";
 import ReplyPreviewBar from "../components/chats/ReplyPreviewBar";
 import ChatHeader from "../components/chats/room/ChatHeader";
 import GroupAddMembersPanel from "../components/chats/room/GroupAddMembersPanel";
@@ -66,6 +67,7 @@ import searchIcon from "../assets/icons/search.png";
 
 const CHAT_TWO_COLUMN_BREAKPOINT = 990;
 const CHAT_SINGLE_COLUMN_BREAKPOINT = 810;
+const CHAT_NOTICE_AUTO_HIDE_MS = 5000;
 const INDEFINITE_MUTE_MS = 1000 * 60 * 60 * 24 * 365 * 10;
 const MUTE_DURATION_OPTIONS = [
   { key: "5m", label: "5 mins", ms: 5 * 60 * 1000 },
@@ -137,10 +139,25 @@ export default function ChatsPanel() {
   const cropDragRef = useRef({ x: 0, y: 0, dragging: false });
 
   useEffect(() => {
+    if (!err) return undefined;
+    const timer = window.setTimeout(() => {
+      setErr("");
+    }, CHAT_NOTICE_AUTO_HIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [err]);
+
+  useEffect(() => {
+    if (!callDebug) return undefined;
+    const timer = window.setTimeout(() => {
+      setCallDebug("");
+    }, CHAT_NOTICE_AUTO_HIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [callDebug]);
+
+  useEffect(() => {
     const onDebug = (evt) => {
       if (!evt?.detail) return;
       setCallDebug(evt.detail);
-      setTimeout(() => setCallDebug(""), 3000);
     };
     window.addEventListener("call:debug", onDebug);
     return () => window.removeEventListener("call:debug", onDebug);
@@ -1748,6 +1765,65 @@ export default function ChatsPanel() {
     };
   }, [accessToken, loadChats, loadMessageRequests]);
 
+  useEffect(() => {
+    if (!accessToken) return undefined;
+
+    const handleChatRemoved = (payload) => {
+      const removedChatId = String(payload?.chatId || "");
+      if (!removedChatId) return;
+
+      setChats((prev) =>
+        prev.map((chat) =>
+          String(chat._id) === removedChatId
+            ? {
+                ...chat,
+                historyOnly: true,
+              }
+            : chat
+        )
+      );
+
+      loadChats().catch(() => {});
+    };
+
+    const handleNotificationRefresh = (payload) => {
+      const eventType = String(payload?.type || "");
+      const refreshedChatId = String(payload?.chatId || "");
+      if (eventType !== "group_added_you" || !refreshedChatId) return;
+
+      setChats((prev) =>
+        prev.map((chat) =>
+          String(chat._id) === refreshedChatId
+            ? {
+                ...chat,
+                historyOnly: false,
+              }
+            : chat
+        )
+      );
+
+      if (String(selectedChatId) !== refreshedChatId) {
+        loadChats().catch(() => {});
+        return;
+      }
+
+      socket.emit("chat:join", { chatId: refreshedChatId }, (reply) => {
+        if (reply?.ok) {
+          loadMessages(refreshedChatId).catch(() => {});
+        }
+        loadChats().catch(() => {});
+      });
+    };
+
+    socket.on("chat:removed", handleChatRemoved);
+    socket.on("notifications:refresh", handleNotificationRefresh);
+
+    return () => {
+      socket.off("chat:removed", handleChatRemoved);
+      socket.off("notifications:refresh", handleNotificationRefresh);
+    };
+  }, [accessToken, loadChats, loadMessages, selectedChatId, setChats]);
+
   async function onSearch(e) {
     e.preventDefault();
     setErr("");
@@ -2578,7 +2654,6 @@ export default function ChatsPanel() {
     async (callIdOverride = "") => {
       if (!GROUP_CALLS_ENABLED) {
         setCallDebug("Group calls are disabled.");
-        setTimeout(() => setCallDebug(""), 3000);
         return;
       }
       if (!selectedChatId) return;
@@ -2593,7 +2668,6 @@ export default function ChatsPanel() {
       });
       if (!joinRes?.ok) {
         setCallDebug(joinRes?.message || "Failed to join group call.");
-        setTimeout(() => setCallDebug(""), 3000);
       }
     },
     [
@@ -2610,29 +2684,24 @@ export default function ChatsPanel() {
   const handleStartCall = useCallback(async () => {
     if (!selectedChatId) {
       setCallDebug("Select a chat first.");
-      setTimeout(() => setCallDebug(""), 2000);
       return;
     }
     if (isInCall) {
       setCallDebug("You're already in a call.");
-      setTimeout(() => setCallDebug(""), 2000);
       return;
     }
     if (!socket.connected) {
       setCallDebug("Socket not connected. Try refreshing.");
-      setTimeout(() => setCallDebug(""), 3000);
       return;
     }
 
     if (isGroupChat) {
       if (!GROUP_CALLS_ENABLED) {
         setCallDebug("Group calls are disabled.");
-        setTimeout(() => setCallDebug(""), 3000);
         return;
       }
       if (selectedChat?.messagingCaps?.calls === false) {
         setCallDebug("Only admins can start calls in this chat.");
-        setTimeout(() => setCallDebug(""), 2500);
         return;
       }
       if (selectedOngoingGroupCall?.callId) {
@@ -2645,14 +2714,12 @@ export default function ChatsPanel() {
       });
       if (!result?.ok) {
         setCallDebug(result?.message || "Failed to start group call.");
-        setTimeout(() => setCallDebug(""), 3000);
       }
       return;
     }
 
     if (!isDirectChat || !directPeerId) {
       setCallDebug("Call unavailable: select a direct chat first.");
-      setTimeout(() => setCallDebug(""), 2000);
       return;
     }
 
@@ -2672,7 +2739,6 @@ export default function ChatsPanel() {
     }
     if (!callWindow) {
       setCallDebug("Pop-up blocked. Allow popups for this site to start a call.");
-      setTimeout(() => setCallDebug(""), 3000);
       return;
     }
     startCall({
@@ -2985,7 +3051,9 @@ export default function ChatsPanel() {
       <div className={`row g-3 chats-panel-row ${rowLayoutClass}`}>
       {err && (
         <div className="col-12">
-          <div className="alert alert-danger">{err}</div>
+          <ChatNotice tone="danger" role="alert">
+            {err}
+          </ChatNotice>
         </div>
       )}
 
@@ -3074,12 +3142,12 @@ export default function ChatsPanel() {
           topContent={
             <>
               {callDebug && (
-                <div className="alert alert-info py-2">{callDebug}</div>
+                <ChatNotice tone="info">{callDebug}</ChatNotice>
               )}
               {blockedByMe ? (
-                <div className="alert alert-warning py-2">
+                <ChatNotice tone="warning" className="chat-blocked-banner">
                   You blocked this user.
-                </div>
+                </ChatNotice>
               ) : null}
             </>
           }
@@ -3151,7 +3219,7 @@ export default function ChatsPanel() {
           composerTopContent={
             <>
               {isIncomingRequestThread ? (
-                <div className="chat-request-actions-bar">
+                <div className="chat-request-actions-bar chat-notice chat-notice--muted">
                   <div className="chat-request-actions-label">
                     Message request from @{requestPeerName || "user"}
                   </div>
@@ -3176,17 +3244,17 @@ export default function ChatsPanel() {
                 </div>
               ) : null}
               {isPendingOutgoingRequest ? (
-                <div className="alert alert-info py-2 chat-request-status-banner">
+                <ChatNotice tone="info" className="chat-request-status-banner">
                   Message request sent. You can send more after it is accepted.
-                </div>
+                </ChatNotice>
               ) : null}
               {isDeclinedOutgoingRequest ? (
-                <div className="alert alert-secondary py-2 chat-request-status-banner">
+                <ChatNotice tone="muted" className="chat-request-status-banner">
                   Your message request was declined.
-                </div>
+                </ChatNotice>
               ) : null}
               {blockedByOther ? (
-                <div className="alert alert-danger py-2 chat-blocked-banner">
+                <ChatNotice tone="danger" className="chat-blocked-banner">
                   <span className="chat-blocked-icon" aria-hidden="true">
                     <svg
                       viewBox="0 0 24 24"
@@ -3198,12 +3266,12 @@ export default function ChatsPanel() {
                     </svg>
                   </span>
                   You've been blocked by this user.
-                </div>
+                </ChatNotice>
               ) : null}
               {isHistoryOnlyChat ? (
-                <div className="alert alert-secondary py-2 chat-blocked-banner">
+                <ChatNotice tone="muted" className="chat-blocked-banner">
                   You were removed from this chat. You can read past messages only.
-                </div>
+                </ChatNotice>
               ) : null}
             </>
           }

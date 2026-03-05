@@ -120,6 +120,7 @@ export default function MessageItem({
   };
   const isPending = Boolean(message.pending);
   const isCallLog = message.type === "call_log";
+  const hasReactions = Boolean(reactions);
   const timestampSource = message.createdAt || message.sentAt || message.updatedAt;
   const formattedTimestamp = timestampSource
     ? new Date(timestampSource).toLocaleString()
@@ -149,7 +150,7 @@ export default function MessageItem({
   };
 
   return (
-    <div>
+    <div className={`message-item ${hasReactions ? "has-reactions" : ""}`}>
       <div
         className={`message-row ${
           sameSenderPrev ? "msg-continue" : "msg-start"
