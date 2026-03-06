@@ -436,15 +436,20 @@ router.post("/:id/join", authRequired, async (req, res) => {
     });
   }
 
-  const updated = await Hangout.findByIdAndUpdate(
-    id,
+  const statusUpdatedAt = new Date();
+  await Hangout.updateOne(
+    { _id: id },
     {
       $addToSet: { attendeeIds: me },
       $pull: { pendingJoinRequests: { userId: me }, attendeeStatuses: { userId: me } },
-      $push: { attendeeStatuses: { userId: me, status: "Confirmed", updatedAt: new Date() } },
-    },
-    { new: true }
-  )
+    }
+  );
+  await Hangout.updateOne(
+    { _id: id, attendeeStatuses: { $not: { $elemMatch: { userId: me } } } },
+    { $push: { attendeeStatuses: { userId: me, status: "Confirmed", updatedAt: statusUpdatedAt } } }
+  );
+
+  const updated = await Hangout.findById(id)
     .populate("creatorId", "username displayName avatarUrl")
     .populate("attendeeIds", "username displayName avatarUrl")
     .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
@@ -482,22 +487,27 @@ router.post("/:id/join-requests/:userId/accept", authRequired, async (req, res) 
     return res.status(409).json({ message: "Hangout is full" });
   }
 
-  const updated = await Hangout.findByIdAndUpdate(
-    id,
+  const statusUpdatedAt = new Date();
+  await Hangout.updateOne(
+    { _id: id },
     {
       $addToSet: { attendeeIds: userId },
       $pull: { pendingJoinRequests: { userId }, attendeeStatuses: { userId } },
-      $push: { attendeeStatuses: { userId, status: "Confirmed", updatedAt: new Date() } },
       $push: {
         approvedJoinEvents: {
           userId,
           approvedById: me,
-          approvedAt: new Date(),
+          approvedAt: statusUpdatedAt,
         },
       },
-    },
-    { new: true }
-  )
+    }
+  );
+  await Hangout.updateOne(
+    { _id: id, attendeeStatuses: { $not: { $elemMatch: { userId } } } },
+    { $push: { attendeeStatuses: { userId, status: "Confirmed", updatedAt: statusUpdatedAt } } }
+  );
+
+  const updated = await Hangout.findById(id)
     .populate("creatorId", "username displayName avatarUrl")
     .populate("attendeeIds", "username displayName avatarUrl")
     .populate("pendingJoinRequests.userId", "username displayName avatarUrl");
