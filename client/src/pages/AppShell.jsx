@@ -1,9 +1,1 @@
-import LayoutAppShell from "../components/layout/AppShell";
-
-export default function AppShell() {
-  return (
-    <>
-      <LayoutAppShell />
-    </>
-  );
-}
+export { default } from "../legacy/pages/AppShell.jsx";
