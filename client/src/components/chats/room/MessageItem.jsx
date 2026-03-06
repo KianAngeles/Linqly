@@ -121,6 +121,8 @@ export default function MessageItem({
   const isPending = Boolean(message.pending);
   const isCallLog = message.type === "call_log";
   const hasReactions = Boolean(reactions);
+  const senderAvatarFallbackLabel =
+    message.sender?.username || message.displayName || "?";
   const timestampSource = message.createdAt || message.sentAt || message.updatedAt;
   const formattedTimestamp = timestampSource
     ? new Date(timestampSource).toLocaleString()
@@ -164,7 +166,7 @@ export default function MessageItem({
               (senderAvatar ? (
                 <img
                   src={senderAvatar}
-                  alt={message.displayName || message.sender?.username || "Avatar"}
+                  alt={senderAvatarFallbackLabel}
                   width={38}
                   height={38}
                   className="msg-avatar-img"
@@ -172,7 +174,7 @@ export default function MessageItem({
                 />
               ) : (
                 <div className="msg-avatar-fallback">
-                  {String(message.displayName || message.sender?.username || "?")
+                  {String(senderAvatarFallbackLabel)
                     .charAt(0)
                     .toUpperCase()}
                 </div>

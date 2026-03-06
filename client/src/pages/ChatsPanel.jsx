@@ -2483,6 +2483,9 @@ export default function ChatsPanel() {
   const directPeerName = selectedChat
     ? getDisplayName(directPeer, nicknamesMap)
     : requestPeerName;
+  const directPeerUsername = String(
+    selectedChat ? directPeer?.username || selectedChat?.otherUser?.username || "" : requestPeerName
+  ).trim();
   const directPeerAvatar =
     selectedChat && (directPeer?.avatarUrl || selectedChat?.otherUser?.avatarUrl)
       ? (directPeer?.avatarUrl || selectedChat?.otherUser?.avatarUrl).startsWith("http://") ||
@@ -3111,6 +3114,13 @@ export default function ChatsPanel() {
                     ? directPeerAvatar
                     : groupAvatar
               }
+              avatarFallbackText={
+                isIncomingRequestThread
+                  ? requestPeerName
+                  : isDirectChat
+                    ? directPeerUsername || directPeerName
+                    : headerTitle
+              }
               isOnline={isDirectChat ? directPeerOnline : false}
               isMuted={isMuted}
               showBackButton={isSingleColumn && Boolean(selectedChatId)}
@@ -3370,7 +3380,10 @@ export default function ChatsPanel() {
                     />
                   ) : (
                     <div className="chat-settings-avatar chat-settings-avatar-fallback">
-                      {directPeerName.trim().charAt(0).toUpperCase()}
+                      {String(directPeerUsername || directPeerName || "?")
+                        .trim()
+                        .charAt(0)
+                        .toUpperCase()}
                     </div>
                   )}
                   {directPeerOnline && (

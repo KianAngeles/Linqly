@@ -345,7 +345,7 @@ html[data-theme="dark"] .uc-panel .small.text-muted {
 }
 
 .uc-mini .msg-more-icon {
-  transform: rotate(90deg);
+  transform: none;
 }
 
 .uc-mini .msg-react-picker {

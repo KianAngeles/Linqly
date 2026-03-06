@@ -12,6 +12,7 @@ import settingsIcon from "../../assets/icons/sidebar-icons/setting.png";
 import logoutIcon from "../../assets/icons/sidebar-icons/logout.png";
 import minimizeIcon from "../../assets/icons/sidebar-icons/minimize.png";
 import closeIcon from "../../assets/icons/sidebar-icons/close.png";
+import linqlyLogo from "../../assets/icons/linqly-logo.png";
 
 const SIDEBAR_COLLAPSE_STORAGE_KEY = "linqly.sidebarCollapsed";
 
@@ -180,7 +181,19 @@ export default function Sidebar() {
       </div>
 
       <div className="app-sidebar-brand">
-        <div className="app-sidebar-brand-name">Linqly</div>
+        <NavLink
+          to="/app"
+          end
+          className="app-sidebar-brand-link"
+          aria-label="Go to home"
+          title="Home"
+        >
+          <img
+            src={linqlyLogo}
+            alt="Linqly logo"
+            className="app-sidebar-brand-logo"
+          />
+        </NavLink>
       </div>
 
       <nav className="app-sidebar-nav">

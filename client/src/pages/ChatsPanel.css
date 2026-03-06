@@ -1527,6 +1527,14 @@ html[data-theme="dark"] .chat-list-avatar-fallback {
   color: var(--text);
 }
 
+html[data-theme="dark"] .chat-header-avatar-fallback,
+html[data-theme="dark"] .msg-avatar-fallback,
+html[data-theme="dark"] .chat-typing-fallback,
+html[data-theme="dark"] .chat-empty-intro-avatar-fallback {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
 html[data-theme="dark"] .chats-sidebar-panel .text-muted {
   color: var(--text-muted) !important;
 }

@@ -6,6 +6,7 @@ export default function ChatHeader({
   username,
   title = "Chat",
   avatarUrl,
+  avatarFallbackText = "",
   isOnline,
   isMuted,
   showBackButton = false,
@@ -20,7 +21,10 @@ export default function ChatHeader({
   groupCallBanner = null,
 }) {
   const lastCallRef = useRef(0);
-  const avatarInitial = String(title || username || "?").trim().charAt(0).toUpperCase();
+  const avatarInitial = String(avatarFallbackText || title || username || "?")
+    .trim()
+    .charAt(0)
+    .toUpperCase();
   const handleCall = (e) => {
     e.preventDefault();
     e.stopPropagation();

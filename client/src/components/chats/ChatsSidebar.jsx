@@ -162,6 +162,13 @@ export default function ChatsSidebar({
       const previewShort =
         previewText.length > 18 ? `${previewText.slice(0, 18)}...` : previewText;
       const rawTitle = String(c.displayName || c.type || "");
+      const avatarFallbackLabel =
+        c.type === "direct"
+          ? c.otherUser?.username ||
+            c.otherUser?.displayName ||
+            c.displayName ||
+            c.type
+          : c.displayName || c.type;
       const titleShort = rawTitle.length > 21 ? `${rawTitle.slice(0, 21)}...` : rawTitle;
       const lastMessageAt = c.lastMessageAt ? new Date(c.lastMessageAt).getTime() : 0;
       const lastReadAt = c.lastReadAt ? new Date(c.lastReadAt).getTime() : 0;
@@ -191,7 +198,7 @@ export default function ChatsSidebar({
                   />
                 ) : (
                   <div className="chat-list-avatar chat-list-avatar-fallback">
-                    {getInitial(c.displayName || c.type)}
+                    {getInitial(avatarFallbackLabel)}
                   </div>
                 )}
                 {c.type === "direct" && c.otherUser?.isOnline && (
