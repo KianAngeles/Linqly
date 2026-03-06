@@ -2,7 +2,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../store/AuthContext";
 import { usersApi } from "../../../api/users.api";
-import { API_BASE } from "../../../api/http";
+import { API_BASE } from "../../../shared/api/http.js";
 import "./Settings.css";
 
 export default function Settings() {

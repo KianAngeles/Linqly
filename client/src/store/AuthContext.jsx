@@ -1,12 +1,12 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { authApi } from "../api/auth.api";
-import { API_BASE, authFetch, syncAccessToken } from "../api/http";
-import { socket } from "../socket";
-import { isChatActive } from "./chatsStore";
+import { API_BASE, authFetch, syncAccessToken } from "../shared/api/http.js";
+import { socket } from "../shared/realtime/socket.js";
+import { isChatActive } from "../features/chats/store/chatsStore.js";
 import {
   NotificationSoundManager,
   initMessageNotificationSound,
-} from "../utils/notificationSoundManager";
+} from "../shared/lib/notificationSoundManager.js";
 
 const AuthContext = createContext(null);
 

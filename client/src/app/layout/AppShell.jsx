@@ -1,8 +1,8 @@
 ﻿import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import HeaderBar from "./HeaderBar";
-import IncomingCallModal from "../../components/calls/IncomingCallModal";
-import UniversalChat from "../../components/universal-chat/UniversalChat";
+import IncomingCallModal from "../../features/calls/components/IncomingCallModal.jsx";
+import UniversalChat from "../../features/chats/components/universal/UniversalChat.jsx";
 import "./AppShell.css";
 
 export default function AppShell() {

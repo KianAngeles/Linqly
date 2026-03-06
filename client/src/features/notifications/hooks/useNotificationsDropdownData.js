@@ -1,10 +1,10 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GROUP_CALLS_ENABLED } from "../../../constants/featureFlags";
+import { GROUP_CALLS_ENABLED } from "../../../shared/constants/featureFlags.js";
 import { notificationsApi } from "../api/notifications.api";
 import { friendsApi } from "../../../api/friends.api";
 import { hangoutsApi } from "../../../api/hangouts.api";
-import { API_BASE } from "../../../api/http";
-import { socket } from "../../../socket";
+import { API_BASE } from "../../../shared/api/http.js";
+import { socket } from "../../../shared/realtime/socket.js";
 
 const BANNER_AUTO_HIDE_MS = 3000;
 const BANNER_EXIT_MS = 220;

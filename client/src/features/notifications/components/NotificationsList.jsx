@@ -1,4 +1,4 @@
-﻿import { GROUP_CALLS_ENABLED } from "../../../constants/featureFlags";
+﻿import { GROUP_CALLS_ENABLED } from "../../../shared/constants/featureFlags.js";
 import {
   formatNotificationTime,
   getNotificationMessage,

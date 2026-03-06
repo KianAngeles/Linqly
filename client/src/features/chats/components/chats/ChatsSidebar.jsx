@@ -4,7 +4,7 @@ import darkSearchIcon from "../../../../assets/icons/chat-settings-icons/dark-se
 import requestIcon from "../../../../assets/icons/chat-settings-icons/request.png";
 import ChatSidebarHeader from "./ChatSidebarHeader";
 import ChatModeToggle from "./ChatModeToggle";
-import { GROUP_CALLS_ENABLED } from "../../../../constants/featureFlags";
+import { GROUP_CALLS_ENABLED } from "../../../../shared/constants/featureFlags.js";
 
 export default function ChatsSidebar({
   userId,

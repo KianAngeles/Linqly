@@ -1,4 +1,4 @@
-﻿import { apiFetch, API_BASE, authFetch } from "../../../api/http";
+﻿import { apiFetch, API_BASE, authFetch } from "../../../shared/api/http.js";
 
 export const usersApi = {
   checkUsername: (username) =>

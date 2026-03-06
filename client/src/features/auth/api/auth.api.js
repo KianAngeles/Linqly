@@ -1,4 +1,4 @@
-﻿import { apiFetch } from "../../../api/http";
+﻿import { apiFetch } from "../../../shared/api/http.js";
 
 export const authApi = {
   register: (body) => apiFetch("/auth/register", { method: "POST", body: JSON.stringify(body) }),

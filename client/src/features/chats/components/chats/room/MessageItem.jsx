@@ -1,8 +1,8 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import CallLogMessage from "./CallLogMessage";
-import GroupOngoingCallMessage from "../../../../../components/calls/GroupOngoingCallMessage";
-import GroupCallEndedMessage from "../../../../../components/calls/GroupCallEndedMessage";
-import { GROUP_CALLS_ENABLED } from "../../../../../constants/featureFlags";
+import GroupOngoingCallMessage from "../../../../calls/components/GroupOngoingCallMessage.jsx";
+import GroupCallEndedMessage from "../../../../calls/components/GroupCallEndedMessage.jsx";
+import { GROUP_CALLS_ENABLED } from "../../../../../shared/constants/featureFlags.js";
 
 function ActionIcon({ type, className = "" }) {
   if (type === "reply") {

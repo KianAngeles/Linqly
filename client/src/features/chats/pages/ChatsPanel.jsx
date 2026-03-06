@@ -1,15 +1,15 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../../store/AuthContext";
-import { useCall } from "../../../store/CallContext";
-import { socket } from "../../../socket";
+import { useCall } from "../../calls/store/CallContext.jsx";
+import { socket } from "../../../shared/realtime/socket.js";
 import useChatSocketEvents from "../hooks/chats/useChatSocketEvents";
 import { chatsApi } from "../api/chats.api";
 import { messagesApi } from "../api/messages.api";
 import { messageRequestsApi } from "../api/messageRequests.api";
 import { usersApi } from "../../../api/users.api";
 import { friendsApi } from "../../../api/friends.api";
-import { API_BASE } from "../../../api/http";
+import { API_BASE } from "../../../shared/api/http.js";
 import useChatsData from "../hooks/chats/useChatsData";
 import useMessagesData from "../hooks/chats/useMessagesData";
 import useGroupManagement from "../hooks/chats/useGroupManagement";
@@ -22,7 +22,7 @@ import { REACTION_EMOJIS, getMessageTimestamp, renderMessageText } from "../util
 import { getDirectPeer, getDisplayName, getUserId, getUserName } from "../utils/chats/users";
 import { resolveAttachmentUrl } from "../utils/chats/urls";
 import useReadReceipts, { resolveSeenByMessage } from "../hooks/chats/useReadReceipts";
-import { GROUP_CALLS_ENABLED } from "../../../constants/featureFlags";
+import { GROUP_CALLS_ENABLED } from "../../../shared/constants/featureFlags.js";
 
 import ChatsSidebar from "../components/chats/ChatsSidebar";
 import ChatRoom from "../components/chats/ChatRoom";
@@ -40,7 +40,7 @@ import FindMessageOverlay from "../components/chats/room/FindMessageOverlay";
 import SharedOverlay from "../components/chats/room/SharedOverlay";
 import GroupNameModal from "../components/chats/room/GroupNameModal";
 import NicknamesModal from "../components/chats/room/NicknamesModal";
-import GroupCallHeaderBanner from "../../../components/calls/GroupCallHeaderBanner";
+import GroupCallHeaderBanner from "../../calls/components/GroupCallHeaderBanner.jsx";
 import EmojiPicker from "emoji-picker-react";
 
 import "./ChatsPanel.css";

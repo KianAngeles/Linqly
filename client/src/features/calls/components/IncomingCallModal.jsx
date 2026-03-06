@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef } from "react";
-import { useCall } from "../../../store/CallContext";
-import { GROUP_CALLS_ENABLED } from "../../../constants/featureFlags";
+import { useCall } from "../store/CallContext.jsx";
+import { GROUP_CALLS_ENABLED } from "../../../shared/constants/featureFlags.js";
 import "./IncomingCallModal.css";
 
 export default function IncomingCallModal() {

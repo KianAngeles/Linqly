@@ -3,7 +3,7 @@ import { useAuth } from "../../../../store/AuthContext";
 import { chatsApi } from "../../api/chats.api";
 import { friendsApi } from "../../../../api/friends.api";
 import { messagesApi } from "../../api/messages.api";
-import { socket } from "../../../../socket";
+import { socket } from "../../../../shared/realtime/socket.js";
 import { getDisplayName } from "../../utils/chats/users";
 import { formatTimeLabel } from "../../utils/chats/formatting";
 import { REACTION_EMOJIS, getMessageTimestamp, renderMessageText } from "../../utils/chats/messages";
@@ -25,7 +25,7 @@ import callIcon from "../../../../assets/icons/call.png";
 import "../../pages/ChatsPanel.css";
 import "./UniversalChat.css";
 import { useNavigate } from "react-router-dom";
-import { useCall } from "../../../../store/CallContext";
+import { useCall } from "../../../calls/store/CallContext.jsx";
 import { isChatUnread, markChatRead, useChatsStore } from "../../store/chatsStore";
 
 const MAX_OPEN = 3;

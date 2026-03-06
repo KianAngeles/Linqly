@@ -2,15 +2,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../../store/AuthContext";
-import { useCall } from "../../store/CallContext";
+import { useCall } from "../../features/calls/store/CallContext.jsx";
 import { usersApi } from "../../api/users.api";
-import NotificationsList from "../../components/notifications/NotificationsList";
+import NotificationsList from "../../features/notifications/components/NotificationsList.jsx";
 import {
   formatNotificationTime,
   getNotificationMessage,
   resolveAvatarUrl,
   useNotificationsDropdownData,
-} from "../../hooks/useNotificationsDropdownData";
+} from "../../features/notifications/hooks/useNotificationsDropdownData.js";
 import searchIcon from "../../assets/icons/friends-icons/search.png";
 import notificationBellIcon from "../../assets/icons/Header-icons/notification-bell.png";
 import sunIcon from "../../assets/icons/Header-icons/sun.png";

@@ -1,4 +1,4 @@
-﻿import { authFetch } from "../../../api/http";
+﻿import { authFetch } from "../../../shared/api/http.js";
 const API = import.meta.env.VITE_API_URL;
 
 export const messageRequestsApi = {

@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { socket } from "../../../socket";
+import { socket } from "../../../shared/realtime/socket.js";
 
 const chatsStore = {
   chats: [],

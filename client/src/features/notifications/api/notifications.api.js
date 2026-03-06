@@ -1,4 +1,4 @@
-﻿import { apiFetch } from "../../../api/http";
+﻿import { apiFetch } from "../../../shared/api/http.js";
 
 export const notificationsApi = {
   list: (accessToken) =>

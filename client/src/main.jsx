@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { AuthProvider } from "./store/AuthContext";
-import { CallProvider } from "./store/CallContext";
+import { CallProvider } from "./features/calls/store/CallContext.jsx";
 
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";

@@ -1,7 +1,7 @@
 ﻿import { useEffect } from "react";
 import { chatsApi } from "../../api/chats.api";
-import { socket } from "../../../../socket";
-import { GROUP_CALLS_ENABLED } from "../../../../constants/featureFlags";
+import { socket } from "../../../../shared/realtime/socket.js";
+import { GROUP_CALLS_ENABLED } from "../../../../shared/constants/featureFlags.js";
 
 export default function useChatSocketEvents({
   accessToken,

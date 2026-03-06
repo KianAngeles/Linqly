@@ -1,4 +1,4 @@
-﻿import { API_BASE, authFetch } from "../../../api/http";
+﻿import { API_BASE, authFetch } from "../../../shared/api/http.js";
 const API = API_BASE;
 
 async function parseJsonSafe(response) {

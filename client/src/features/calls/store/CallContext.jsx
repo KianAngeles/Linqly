@@ -1,8 +1,8 @@
 ﻿import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { socket } from "../../../socket";
-import { GROUP_CALLS_ENABLED } from "../../../constants/featureFlags";
+import { socket } from "../../../shared/realtime/socket.js";
+import { GROUP_CALLS_ENABLED } from "../../../shared/constants/featureFlags.js";
 import { useAuth } from "../../../store/AuthContext";
-import { API_BASE, authFetch } from "../../../api/http";
+import { API_BASE, authFetch } from "../../../shared/api/http.js";
 
 const CallContext = createContext(null);
 

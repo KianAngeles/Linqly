@@ -4,7 +4,7 @@ import { useAuth } from "../../../store/AuthContext";
 import { usersApi } from "../../../api/users.api";
 import { friendsApi } from "../../../api/friends.api";
 import { chatsApi } from "../../../api/chats.api";
-import { API_BASE } from "../../../api/http";
+import { API_BASE } from "../../../shared/api/http.js";
 import "./SearchResults.css";
 
 function normalizeSearchResult(raw) {

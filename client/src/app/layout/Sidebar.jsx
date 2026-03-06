@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../../store/AuthContext";
-import { useChatsStore } from "../../store/chatsStore";
+import { useChatsStore } from "../../features/chats/store/chatsStore.js";
 import homeIcon from "../../assets/icons/sidebar-icons/home.png";
 import messengerIcon from "../../assets/icons/sidebar-icons/messenger.png";
 import mapIcon from "../../assets/icons/sidebar-icons/map.png";

@@ -1,12 +1,12 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../../store/AuthContext";
-import { socket } from "../../../socket";
+import { socket } from "../../../shared/realtime/socket.js";
 import CallLayout from "../components/CallLayout";
 import GroupCallAdminMenu from "../components/GroupCallAdminMenu";
 import { messagesApi } from "../../../api/messages.api";
-import { API_BASE } from "../../../api/http";
-import { GROUP_CALLS_ENABLED } from "../../../constants/featureFlags";
+import { API_BASE } from "../../../shared/api/http.js";
+import { GROUP_CALLS_ENABLED } from "../../../shared/constants/featureFlags.js";
 
 const TURN_URLS = (import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || "")
   .split(",")

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { chatsApi } from "../../api/chats.api";
-import { socket } from "../../../../socket";
+import { socket } from "../../../../shared/realtime/socket.js";
 import { getMessageTimestamp } from "../../utils/chats/messages";
 import { addActiveChat, markChatRead, removeActiveChat } from "../../store/chatsStore";
 

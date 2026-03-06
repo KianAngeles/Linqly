@@ -1,20 +1,20 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Landing from "./pages/Landing";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import AppShell from "./components/layout/AppShell";
+import Landing from "./features/auth/pages/Landing.jsx";
+import Login from "./features/auth/pages/Login.jsx";
+import Register from "./features/auth/pages/Register.jsx";
+import ForgotPassword from "./features/auth/pages/ForgotPassword.jsx";
+import ResetPassword from "./features/auth/pages/ResetPassword.jsx";
+import AppShell from "./app/layout/AppShell.jsx";
 import { useAuth } from "./store/AuthContext";
-import ChatsPanel from "./pages/ChatsPanel";
-import Settings from "./pages/Settings";
-import HangoutsMap from "./pages/HangoutsMap";
-import Friends from "./pages/Friends";
-import Home from "./pages/Home";
-import Call from "./pages/Call";
-import Profile from "./pages/Profile";
-import SearchResults from "./pages/SearchResults";
-import Notifications from "./pages/Notifications";
+import ChatsPanel from "./features/chats/pages/ChatsPanel.jsx";
+import Settings from "./features/settings/pages/Settings.jsx";
+import HangoutsMap from "./features/hangouts/pages/HangoutsMap.jsx";
+import Friends from "./features/friends/pages/Friends.jsx";
+import Home from "./features/home/pages/Home.jsx";
+import Call from "./features/calls/pages/Call.jsx";
+import Profile from "./features/profile/pages/Profile.jsx";
+import SearchResults from "./features/search/pages/SearchResults.jsx";
+import Notifications from "./features/notifications/pages/Notifications.jsx";
 
 
 function Protected({ children }) {
