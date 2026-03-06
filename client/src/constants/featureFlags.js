@@ -1,1 +1,1 @@
-export const GROUP_CALLS_ENABLED = false;
+export * from "../shared/constants/featureFlags.js";
