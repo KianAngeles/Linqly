@@ -1,3 +1,2 @@
-export function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+﻿export * from "../../features/chats/utils/chats/strings";
+

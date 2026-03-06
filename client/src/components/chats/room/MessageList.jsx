@@ -1,3 +1,3 @@
-export default function MessageList({ items }) {
-  return <>{items}</>;
-}
+﻿export { default } from "../../../features/chats/components/chats/room/MessageList";
+export * from "../../../features/chats/components/chats/room/MessageList";
+
