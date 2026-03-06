@@ -1,5 +1,1 @@
-function resolveAvatar(user) {
-  return user?.avatarUrl || "";
-}
-
-module.exports = { resolveAvatar };
+module.exports = require("../shared/utils/avatar");
