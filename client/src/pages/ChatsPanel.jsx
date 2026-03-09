@@ -2914,42 +2914,52 @@ export default function ChatsPanel() {
         ? readersForMessage.filter((r) => memberDirectory.has(String(r.userId)))
         : readersForMessage;
       if (eligibleReaders.length > 0) {
-        const members = eligibleReaders.map((r) => {
+        const readerEntries = eligibleReaders.map((r) => {
           const member = memberDirectory.get(String(r.userId));
-          return (
-            member || {
+          return {
+            member:
+              member || {
               id: r.userId,
               username: "User",
               avatarUrl: "",
-            }
-          );
+            },
+            readAt: r.readAt || null,
+          };
         });
-        const visibleMembers = members.slice(0, 6);
-        const remaining = Math.max(0, members.length - visibleMembers.length);
-        const names = members.map((m) => m?.username || "Someone").join(", ");
-        if (visibleMembers.length === 1) {
-          const only = visibleMembers[0];
-          const seenTime = readersForMessage[0]?.readAt
-            ? new Date(readersForMessage[0].readAt).toLocaleTimeString([], {
+        const formatSeenTitle = (member, readAt) => {
+          const seenName =
+            String(getDisplayName(member, nicknamesMap) || member?.username || "Someone").trim() ||
+            "Someone";
+          const seenTime = readAt
+            ? new Date(readAt).toLocaleTimeString([], {
                 hour: "numeric",
                 minute: "2-digit",
               })
             : "";
-          const title = seenTime ? `Seen at ${seenTime}` : "Seen";
+          return seenTime ? `Seen by ${seenName} at ${seenTime}` : `Seen by ${seenName}`;
+        };
+        const visibleReaderEntries = readerEntries.slice(0, 6);
+        const remaining = Math.max(0, readerEntries.length - visibleReaderEntries.length);
+        const names = readerEntries
+          .map(({ member }) => getDisplayName(member, nicknamesMap) || member?.username || "Someone")
+          .join(", ");
+        if (visibleReaderEntries.length === 1) {
+          const onlyEntry = visibleReaderEntries[0];
+          const title = formatSeenTitle(onlyEntry.member, onlyEntry.readAt);
           seenIndicator = (
             <div className="msg-seen-single">
-              {renderSeenAvatar(only, 16, title)}
+              {renderSeenAvatar(onlyEntry.member, 16, title)}
             </div>
           );
         } else {
           seenIndicator = (
             <div className="msg-seen-stack" title={names ? `Seen by ${names}` : "Seen"}>
-              {visibleMembers.map((m) => (
-                <span key={m.id || m._id || m.username}>
+              {visibleReaderEntries.map(({ member, readAt }) => (
+                <span key={member.id || member._id || member.username}>
                   {renderSeenAvatar(
-                    m,
+                    member,
                     14,
-                    m.username ? `Seen by ${m.username}` : "Seen"
+                    formatSeenTitle(member, readAt)
                   )}
                 </span>
               ))}
@@ -3369,7 +3379,7 @@ export default function ChatsPanel() {
             }}
           />
           {selectedChatId && !isGroupChat && !isIncomingRequestThread && (
-            <div className="d-flex flex-column gap-0">
+            <div className="d-flex flex-column gap-0 chat-settings-group-stack">
               <div className="chat-settings-header">
                 <div className="chat-settings-avatar-wrap">
                   {directPeerAvatar ? (

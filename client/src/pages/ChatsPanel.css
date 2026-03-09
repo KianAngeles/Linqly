@@ -713,6 +713,9 @@ html[data-theme="dark"] .chat-more-btn:active {
   background-color: rgba(255, 255, 255, 0.12) !important;
 }
 
+html[data-theme="dark"] .chats-sidebar-panel .chat-sidebar-header-menu .chat-more-btn img {
+  filter: brightness(0) invert(1);
+}
 .chat-input-actions + .emoji-btn {
   display: none;
 }
@@ -2385,13 +2388,14 @@ html:not([data-theme="dark"]) .chat-settings-panel .chat-settings-personal-icon-
 .chat-settings-group-stack {
   flex: 1 1 auto;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .chat-settings-group-panel {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 0;
+  min-height: 100%;
 }
 
 .chat-settings-footer {
@@ -2729,6 +2733,19 @@ html:not([data-theme="dark"]) .chat-settings-panel .chat-settings-personal-icon-
   flex-direction: column;
   gap: 12px;
   padding-top: 4px;
+}
+
+.chat-modal--nicknames {
+  max-height: min(78vh, 640px);
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-modal--nicknames .chat-nicknames-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .chat-nickname-row {
@@ -3656,6 +3673,12 @@ html[data-theme="dark"] .chat-settings-panel .chat-nickname-edit-btn img {
   filter: grayscale(1) brightness(0) invert(1);
 }
 
+html[data-theme="dark"] .chat-settings-panel .chat-settings-member-add img {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  filter: none;
+}
+
 html[data-theme="dark"] .chat-settings-panel .chat-settings-emoji-icon,
 html[data-theme="dark"] .chat-settings-panel .chat-emoji-current {
   background: var(--bg-muted);
@@ -3674,6 +3697,37 @@ html[data-theme="dark"] .chat-settings-panel .chat-settings-member-menu {
 
 html[data-theme="dark"] .chat-settings-panel .chat-settings-member-menu button {
   color: var(--text);
+}
+
+html[data-theme="dark"] .chat-settings-panel .chat-settings-member-menu .chat-settings-menu-item img {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  filter: none;
+}
+
+html[data-theme="dark"] .chat-settings-panel .chat-nickname-edit-btn img {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  filter: brightness(0) invert(1);
+}
+
+html[data-theme="dark"] .chat-settings-panel .chat-nickname-edit-btn {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+html[data-theme="dark"] .chat-settings-panel .chat-nickname-edit-btn:hover,
+html[data-theme="dark"] .chat-settings-panel .chat-nickname-edit-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--border);
+  transform: translateY(-1px);
+}
+
+html[data-theme="dark"] .chat-settings-panel .chat-nickname-edit-btn:active {
+  transform: none;
 }
 
 html[data-theme="dark"] .chat-settings-panel .chat-settings-member-menu button:hover {

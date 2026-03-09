@@ -23,7 +23,7 @@ export default function NicknamesModal({
         setNicknameDraft("");
       }}
     >
-      <div className="chat-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="chat-modal chat-modal--nicknames" onClick={(e) => e.stopPropagation()}>
         <div className="chat-modal-header">
           <div className="fw-semibold">Edit nicknames</div>
           <button
